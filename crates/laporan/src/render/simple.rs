@@ -13,6 +13,7 @@ pub struct SimpleRenderer;
 impl SimpleRenderer {
     /// Constructs a new `SimpleRenderer`.
     #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

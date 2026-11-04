@@ -17,8 +17,8 @@ enum Mode {
 impl Mode {
     fn format(self, value: impl ToTokens) -> TokenStream {
         match self {
-            Mode::Debug => quote!(format_args!("{:?}", #value)),
-            Mode::Display => quote!(#value),
+            Self::Debug => quote!(format_args!("{:?}", #value)),
+            Self::Display => quote!(#value),
         }
     }
 }
@@ -32,9 +32,9 @@ impl Parse for Mode {
 
         let lookahead = input.lookahead1();
         if lookahead.peek(kw::debug) {
-            input.parse::<kw::debug>().map(|_| Mode::Debug)
+            input.parse::<kw::debug>().map(|_| Self::Debug)
         } else if lookahead.peek(kw::display) {
-            input.parse::<kw::display>().map(|_| Mode::Display)
+            input.parse::<kw::display>().map(|_| Self::Display)
         } else {
             Err(lookahead.error())
         }

@@ -30,8 +30,12 @@ struct GlobalDisplayer<'a> {
 impl fmt::Display for GlobalDisplayer<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let renderer = RENDERER.get().map(Box::as_ref).unwrap_or(&SimpleRenderer);
-        renderer.render(&self.payload, f)
+        let renderer = match RENDERER.get() {
+            Some(global) => global.as_ref(),
+            None => &SimpleRenderer,
+        };
+
+        renderer.render(self.payload, f)
     }
 }
 

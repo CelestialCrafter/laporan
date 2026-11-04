@@ -36,6 +36,7 @@ pub struct JsonRenderer {
 impl JsonRenderer {
     /// Constructs a new `JsonRenderer`.
     #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self { pretty: false }
     }

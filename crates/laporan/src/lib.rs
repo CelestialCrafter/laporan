@@ -73,13 +73,13 @@ impl Frame {
 
     /// Helper function to create [`Self::Suggestion`]s.
     #[inline]
-    pub fn suggestion(suggestion: impl Into<String>) -> Frame {
+    pub fn suggestion(suggestion: impl Into<String>) -> Self {
         Self::Suggestion(suggestion.into())
     }
 
     /// Helper function to create [`Self::Attachment`]s.
     #[inline]
-    pub fn attachment(attachment: impl fmt::Display) -> Frame {
+    pub fn attachment(attachment: impl fmt::Display) -> Self {
         Self::Attachment(attachment.to_string())
     }
 }
@@ -153,7 +153,7 @@ pub struct ReportPayload {
     /// Frames attached to this report.
     pub frames: Vec<Frame>,
     /// Child reports that caused this report.
-    pub children: Vec<ReportPayload>,
+    pub children: Vec<Self>,
     /// Main message attached to this report.
     pub message: String,
     /// Other metadata associated with the report, such as creation location.
@@ -164,6 +164,7 @@ impl ReportPayload {
     /// Construct a new `ReportPayload`.
     #[track_caller]
     #[inline]
+    #[must_use]
     pub fn new(message: String) -> Self {
         Self {
             message,
@@ -176,7 +177,7 @@ impl ReportPayload {
 
 /// Type representing a [`Report`], but implementing [`Error`].
 ///
-/// This error type does not carry over all the "frills" of a report (such as pretty error trees).
+/// This error type does not carry over all the frills of a [`Report`] (such as pretty error trees).
 /// It is also impossible to losslessly convert this back to a [`Report`].
 #[derive(Debug)]
 #[repr(transparent)]
@@ -185,10 +186,16 @@ pub struct ReportError(ReportPayload);
 impl Error for ReportError {
     #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
+        // NOTE: we want to provide a source if there is *exactly* one child
         (self.0.children.len() == 1).then(|| {
-            let child = &self.0.children[0];
-            // SAFETY: `ReportError` is repr(transparent) over `ReportPayload`.
-            let error = unsafe { std::mem::transmute::<&ReportPayload, &Self>(child) };
+            let payload = &self.0.children[0];
+            // SAFETY: `Self` is repr(transparent) over `ReportPayload`.
+            // SAFETY: The pointer we are dereferencing came from a valid reference.
+            let error = unsafe {
+                std::ptr::from_ref(payload)
+                    .cast::<Self>()
+                    .as_ref_unchecked()
+            };
             error as &(dyn Error + 'static)
         })
     }
@@ -243,8 +250,9 @@ impl Report<()> {
 
     /// Converts the underlying [`ReportPayload`] back into a `Report`.
     #[inline]
+    #[must_use]
     pub fn from_payload(payload: ReportPayload) -> Self {
-        Report {
+        Self {
             inner: payload.into(),
             _marker: PhantomData,
         }
@@ -273,12 +281,14 @@ impl Report<()> {
 impl<E> Report<E> {
     /// Converts the `Report` into the underlying [`ReportPayload`].
     #[inline]
+    #[must_use]
     pub fn into_payload(self) -> ReportPayload {
         *self.inner
     }
 
     /// Converts this `Report` into a [`ReportError`]
     #[inline]
+    #[must_use]
     pub fn into_error(self) -> ReportError {
         ReportError(*self.inner)
     }
@@ -286,6 +296,7 @@ impl<E> Report<E> {
     /// "Erases" this `Report`s generic parameter to [`()`].
     // NOTE: This should not change self.inner.metadata.type_name like `Self::cast` does.
     #[inline]
+    #[must_use]
     pub fn erased(self) -> Report<()> {
         Report {
             inner: self.inner,
@@ -295,6 +306,7 @@ impl<E> Report<E> {
 
     /// Sets the level associated with the `Report`.
     #[inline]
+    #[must_use]
     pub fn with_level(mut self, level: Level) -> Self {
         self.inner.metadata.level = level;
         self
@@ -302,18 +314,21 @@ impl<E> Report<E> {
 
     /// Appends a [`Frame`] to this `Report`.
     #[inline]
+    #[must_use]
     pub fn with_frame(mut self, frame: Frame) -> Self {
         self.inner.frames.push(frame);
         self
     }
 
     /// Appends an iterator of [`Frame`]s to this `Report`.
+    #[must_use]
     pub fn with_frames(self, frames: impl IntoIterator<Item = Frame>) -> Self {
-        frames.into_iter().fold(self, Report::with_frame)
+        frames.into_iter().fold(self, Self::with_frame)
     }
 
     /// Appends a `Report` as a child to this `Report`.
     #[inline]
+    #[must_use]
     pub fn with_child<F>(mut self, child: Report<F>) -> Self {
         self.inner.children.push(*child.inner);
         self
@@ -321,8 +336,9 @@ impl<E> Report<E> {
 
     /// Appends an iterator of `Report`s as children of this `Report`.
     #[inline]
+    #[must_use]
     pub fn with_children<F>(self, children: impl IntoIterator<Item = Report<F>>) -> Self {
-        children.into_iter().fold(self, Report::with_child)
+        children.into_iter().fold(self, Self::with_child)
     }
 
     /// "Casts" the reports generic parameter to `F`.
@@ -331,6 +347,7 @@ impl<E> Report<E> {
     /// and instead use [`Report::erase`] in place of casting,
     /// but casting can be useful in certain circumstances.
     #[inline]
+    #[must_use]
     pub fn cast<F>(mut self) -> Report<F> {
         self.inner.metadata.type_name = type_name::<F>().to_string();
 
@@ -476,11 +493,7 @@ pub trait IntoReport: Sized + Send + Sync + 'static {
     fn into_report(self) -> Report<Self>;
 }
 
-impl<E> IntoReport for E
-where
-    E: Error + 'static,
-    E: Send + Sync,
-{
+impl<E: Error + Send + Sync + 'static> IntoReport for E {
     #[inline]
     fn into_report(self) -> Report<Self> {
         Report::from_error(self).cast()

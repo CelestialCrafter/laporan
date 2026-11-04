@@ -55,7 +55,7 @@ fn metadata_to_payload(metadata: &tracing::Metadata, visitor: RecordVisitor) -> 
     } else {
         visitor
             .message
-            .unwrap_or("no message specified".to_string())
+            .unwrap_or_else(|| "no message specified".to_string())
     };
 
     let level = match *metadata.level() {
@@ -66,23 +66,23 @@ fn metadata_to_payload(metadata: &tracing::Metadata, visitor: RecordVisitor) -> 
         tracing::Level::ERROR => Level::Error,
     };
 
-    let location = metadata
-        .file()
-        .map(|name| Location::File {
+    let location = metadata.file().map_or_else(
+        || Location::Module(metadata.target().into()),
+        |name| Location::File {
             name: name.into(),
             line: metadata.line(),
             column: None,
-        })
-        .unwrap_or_else(|| Location::Module(metadata.target().into()));
+        },
+    );
 
     ReportPayload {
         frames: visitor.frames,
         children: visitor.children,
         message,
         metadata: Metadata {
-            type_name,
             location,
             level,
+            type_name,
         },
     }
 }
@@ -95,7 +95,9 @@ pub struct ReportLayer<R, W> {
 
 impl ReportLayer<GlobalRenderer, fn() -> std::io::Stderr> {
     /// Constructs a new `ReportLayer`.
+    /// Uses the `GlobalRenderer` and writes to `std::io::stderr` by default.
     #[inline]
+    #[must_use]
     pub fn new() -> Self {
         Self {
             renderer: GlobalRenderer,
@@ -182,6 +184,6 @@ where
 
         let display = self.renderer.render(&payload);
         let mut writer = self.writer.make_writer_for(metadata);
-        let _ = writeln!(writer, "{}", display);
+        let _ = writeln!(writer, "{display}");
     }
 }

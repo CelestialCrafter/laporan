@@ -22,6 +22,7 @@ pub struct LogStyles {
 impl LogStyles {
     /// Constructs a new `LogStyles`.
     #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             error: Style::new().red(),
@@ -50,6 +51,7 @@ pub struct Styles {
 impl Styles {
     /// Constructs a new `Styles`.
     #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             guides: Style::new(),
@@ -77,6 +79,7 @@ pub struct Guides {
 impl Guides {
     /// Constructs a new `Guides`.
     #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             line: "│ ",
@@ -102,6 +105,7 @@ pub struct LogHeaders {
 impl LogHeaders {
     /// Constructs a new `LogHeaders`.
     #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             error: "(error)",
@@ -150,6 +154,7 @@ pub struct Config {
 impl Config {
     /// Constructs a new `Config`.
     #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             guides: Guides::new(),
@@ -172,6 +177,7 @@ pub struct PrettyRenderer {
 impl PrettyRenderer {
     /// Constructs a new `PrettyRenderer`.
     #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             config: Config::new(),
@@ -180,6 +186,7 @@ impl PrettyRenderer {
 
     /// Replaces the underlying render configuration for this renderer.
     #[inline]
+    #[must_use]
     pub const fn with_config(mut self, config: Config) -> Self {
         self.config = config;
         self
@@ -201,7 +208,7 @@ struct LinePrinter<'a, 'b> {
     is_first: bool,
 }
 
-impl<'a, 'b> LinePrinter<'a, 'b> {
+impl LinePrinter<'_, '_> {
     #[inline]
     fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
         if !self.is_first {
@@ -374,7 +381,7 @@ impl PrettyDisplayer<'_> {
         let styles = &self.inner.config.styles;
 
         let len = children.len();
-        for (i, child) in children.into_iter().enumerate() {
+        for (i, child) in children.iter().enumerate() {
             let last = i == len - 1;
 
             let guide = if last {
