@@ -8,17 +8,21 @@ use owo_colors::{OwoColorize, Style};
 use crate::{Frame, Level, Location, Metadata, ReportPayload, render::Renderer};
 
 /// Styles for each log level.
-#[derive(Debug, Copy, Clone)]
+#[derive(Educe, Debug, Copy, Clone)]
+#[educe(Default(expression = Self::new()))]
+#[expect(missing_docs)]
 pub struct LogStyles {
-    error: Style,
-    warn: Style,
-    info: Style,
-    debug: Style,
-    trace: Style,
+    pub error: Style,
+    pub warn: Style,
+    pub info: Style,
+    pub debug: Style,
+    pub trace: Style,
 }
 
-impl Default for LogStyles {
-    fn default() -> Self {
+impl LogStyles {
+    /// Constructs a new `LogStyles`.
+    #[inline]
+    pub const fn new() -> Self {
         Self {
             error: Style::new().red(),
             warn: Style::new().yellow(),
@@ -30,19 +34,23 @@ impl Default for LogStyles {
 }
 
 /// Styles for each component.
-#[derive(Debug, Copy, Clone)]
+#[derive(Educe, Debug, Copy, Clone)]
+#[educe(Default(expression = Self::new()))]
+#[expect(missing_docs)]
 pub struct Styles {
-    guides: Style,
-    context: Style,
-    suggestion: Style,
-    attachment: Style,
-    location: Style,
-    distracting: Style,
-    log: LogStyles,
+    pub guides: Style,
+    pub context: Style,
+    pub suggestion: Style,
+    pub attachment: Style,
+    pub location: Style,
+    pub distracting: Style,
+    pub log: LogStyles,
 }
 
-impl Default for Styles {
-    fn default() -> Self {
+impl Styles {
+    /// Constructs a new `Styles`.
+    #[inline]
+    pub const fn new() -> Self {
         Self {
             guides: Style::new(),
             suggestion: Style::new().green(),
@@ -50,22 +58,26 @@ impl Default for Styles {
             attachment: Style::new().yellow(),
             location: Style::new().purple(),
             distracting: Style::new(),
-            log: LogStyles::default(),
+            log: LogStyles::new(),
         }
     }
 }
 
 /// Display characters for each guide.
-#[derive(Debug, Copy, Clone)]
+#[derive(Educe, Debug, Copy, Clone)]
+#[educe(Default(expression = Self::new()))]
+#[expect(missing_docs)]
 pub struct Guides {
-    line: &'static str,
-    empty: &'static str,
-    branch: &'static str,
-    last_branch: &'static str,
+    pub line: &'static str,
+    pub empty: &'static str,
+    pub branch: &'static str,
+    pub last_branch: &'static str,
 }
 
-impl Default for Guides {
-    fn default() -> Self {
+impl Guides {
+    /// Constructs a new `Guides`.
+    #[inline]
+    pub const fn new() -> Self {
         Self {
             line: "│ ",
             empty: "  ",
@@ -76,17 +88,21 @@ impl Default for Guides {
 }
 
 /// Display characters for each log header.
-#[derive(Debug, Copy, Clone)]
+#[derive(Educe, Debug, Copy, Clone)]
+#[educe(Default(expression = Self::new()))]
+#[expect(missing_docs)]
 pub struct LogHeaders {
-    error: &'static str,
-    warn: &'static str,
-    info: &'static str,
-    debug: &'static str,
-    trace: &'static str,
+    pub error: &'static str,
+    pub warn: &'static str,
+    pub info: &'static str,
+    pub debug: &'static str,
+    pub trace: &'static str,
 }
 
-impl Default for LogHeaders {
-    fn default() -> Self {
+impl LogHeaders {
+    /// Constructs a new `LogHeaders`.
+    #[inline]
+    pub const fn new() -> Self {
         Self {
             error: "(error)",
             warn: "(warn)",
@@ -98,33 +114,49 @@ impl Default for LogHeaders {
 }
 
 /// Display characters for each header.
-#[derive(Debug, Copy, Clone)]
+#[derive(Educe, Debug, Copy, Clone)]
+#[educe(Default(expression = Self::new()))]
+#[expect(missing_docs)]
 pub struct Headers {
-    context: &'static str,
-    suggestion: &'static str,
-    attachment: &'static str,
-    location: &'static str,
-    log: LogHeaders,
+    pub context: &'static str,
+    pub suggestion: &'static str,
+    pub attachment: &'static str,
+    pub location: &'static str,
+    pub log: LogHeaders,
 }
 
-impl Default for Headers {
-    fn default() -> Self {
+impl Headers {
+    #[inline]
+    const fn new() -> Self {
         Self {
             context: "(context)",
             suggestion: "(suggestion)",
             attachment: "(attachment)",
             location: "(location)",
-            log: LogHeaders::default(),
+            log: LogHeaders::new(),
         }
     }
 }
 
 /// Configuration for [`PrettyRenderer`].
 #[derive(Default, Debug, Copy, Clone)]
+#[expect(missing_docs)]
 pub struct Config {
-    guides: Guides,
-    headers: Headers,
-    styles: Styles,
+    pub guides: Guides,
+    pub headers: Headers,
+    pub styles: Styles,
+}
+
+impl Config {
+    /// Constructs a new `Config`.
+    #[inline]
+    pub const fn new() -> Self {
+        Self {
+            guides: Guides::new(),
+            headers: Headers::new(),
+            styles: Styles::new(),
+        }
+    }
 }
 
 /// Pretty renderer for [`Report`]s.
@@ -134,14 +166,23 @@ pub struct Config {
 #[derive(Default, Debug, Copy, Clone)]
 pub struct PrettyRenderer {
     /// Configuration for this renderer
-    pub config: Config,
+    config: Config,
 }
 
 impl PrettyRenderer {
     /// Constructs a new `PrettyRenderer`.
     #[inline]
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Self {
+            config: Config::new(),
+        }
+    }
+
+    /// Replaces the underlying render configuration for this renderer.
+    #[inline]
+    pub const fn with_config(mut self, config: Config) -> Self {
+        self.config = config;
+        self
     }
 }
 
