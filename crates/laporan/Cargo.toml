@@ -4,8 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["derive", "pretty", "serde", "json", "tracing"]
-# default = ["derive"]
+default = ["derive"]
 derive = ["dep:laporan-derive"]
 pretty = ["dep:owo-colors"]
 serde = ["dep:serde"]
@@ -13,10 +12,10 @@ json = ["dep:serde_json", "serde"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 
 [dependencies]
-laporan-derive = { path = "../laporan-derive", optional = true }
-educe = "0.6.0"
+laporan-derive = { version = "0.1.0", path = "../laporan-derive", optional = true }
+educe = "0.8.1"
 tracing = { version = "0.1.44", optional = true }
 tracing-subscriber = { version = "0.3.23", optional = true }
-serde = { version = "1.0.228", features = ["derive"], optional = true }
-serde_json = { version = "1.0.149", optional = true }
-owo-colors = { version = "4.2.3", optional = true }
+serde = { version = "1.0.229", features = ["derive"], optional = true }
+serde_json = { version = "1.0.154", optional = true }
+owo-colors = { version = "4.4.0", optional = true }
