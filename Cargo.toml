@@ -1,6 +1,3 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-
-[workspace.dependencies]
-laporan = { path = "crates/laporan" }

@@ -115,10 +115,10 @@ fn build_into_report_impl(input: &DeriveInput) -> TokenStream {
     let ty_params = generics.type_params().map(|param| &param.ident);
     let ident = &input.ident;
     quote! {
-        impl #generics ::xh_reports::IntoReport for #ident <#(#ty_params)*> {
-            fn into_report(self) -> ::xh_reports::Report<Self> {
+        impl #generics ::laporan::IntoReport for #ident <#(#ty_params)*> {
+            fn into_report(self) -> ::laporan::Report<Self> {
                 let (msg, frames) = #data;
-                ::xh_reports::Report::new(msg).with_frames(frames).cast()
+                ::laporan::Report::new(msg).with_frames(frames).cast()
             }
         }
     }
@@ -152,7 +152,7 @@ fn unsupported_error(span: Span, feature: impl std::fmt::Display) -> Error {
 
 fn build_suggestion(fields: &Fields, attr: &Attribute) -> Result<TokenStream, Error> {
     let fmt = build_formatted(fields, "suggestion", attr)?;
-    Ok(quote!(::xh_reports::Frame::suggestion(#fmt)))
+    Ok(quote!(::laporan::Frame::suggestion(#fmt)))
 }
 
 fn build_attachment(attr: &Attribute) -> Result<TokenStream, Error> {
@@ -169,7 +169,7 @@ fn build_attachment(attr: &Attribute) -> Result<TokenStream, Error> {
         Ok(value)
     })?;
 
-    Ok(quote! ( ::xh_reports::Frame::attachment(#value) ))
+    Ok(quote! ( ::laporan::Frame::attachment(#value) ))
 }
 
 fn build_context(attr: &Attribute) -> Result<impl Iterator<Item = TokenStream>, Error> {
@@ -216,7 +216,7 @@ fn build_context(attr: &Attribute) -> Result<impl Iterator<Item = TokenStream>, 
         let key = LitStr::new(&dest, span);
         let value = mode.format(escape_member(pair.source));
 
-        quote! { ::xh_reports::Frame::context(#key, #value) }
+        quote! { ::laporan::Frame::context(#key, #value) }
     });
 
     Ok(frames)

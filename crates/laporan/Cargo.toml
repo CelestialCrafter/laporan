@@ -1,5 +1,5 @@
 [package]
-name = "xh-reports"
+name = "laporan"
 version = "0.1.0"
 edition = "2024"
 
@@ -11,7 +11,7 @@ json = ["dep:serde_json", "serde"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 
 [dependencies]
-xh-reports-derive = { path = "../laporan-derive" }
+laporan-derive = { path = "../laporan-derive" }
 educe = "0.6.0"
 tracing = { version = "0.1.44", optional = true }
 tracing-subscriber = { version = "0.3.23", optional = true }

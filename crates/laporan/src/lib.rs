@@ -1,4 +1,4 @@
-//! Error handling crate designed for use with Xuehua
+//! Error handling crate, split off from Xuehua
 
 #![warn(missing_docs)]
 
@@ -7,7 +7,7 @@ pub mod layer;
 pub mod prelude;
 pub mod render;
 
-pub use xh_reports_derive::IntoReport;
+pub use laporan_derive::IntoReport;
 
 use std::{
     any::type_name,
@@ -436,7 +436,7 @@ impl<T, E, D: Into<Report<E>>> ResultReportExt<T, E> for StdResult<T, D> {
 /// Trait for converting [`Error`]s into enriched [`Report`]s
 ///
 /// This can be implemented via `#[derive(IntoReport)]`.
-/// See [`xh_reports_derive::IntoReport`] for more information.
+/// See [`laporan_derive::IntoReport`] for more information.
 pub trait IntoReport: Sized + Send + Sync + 'static {
     /// Converts this Error into a [`Report`].
     ///

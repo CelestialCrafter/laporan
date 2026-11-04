@@ -69,6 +69,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "laporan"
+version = "0.1.0"
+dependencies = [
+ "educe",
+ "laporan-derive",
+ "owo-colors",
+ "serde",
+ "serde_json",
+ "smol_str",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "laporan-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -312,29 +335,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
 dependencies = [
  "windows-link",
-]
-
-[[package]]
-name = "xh-reports"
-version = "0.1.0"
-dependencies = [
- "educe",
- "owo-colors",
- "serde",
- "serde_json",
- "smol_str",
- "tracing",
- "tracing-subscriber",
- "xh-reports-derive",
-]
-
-[[package]]
-name = "xh-reports-derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
