@@ -24,6 +24,9 @@ use smol_str::{SmolStr, ToSmolStr};
 
 use crate::render::{GlobalRenderer, Renderer, SimpleRenderer};
 
+#[cfg(feature = "derive")]
+pub use laporan_derive::IntoReport;
+
 /// Helper alias for [`Error`]
 pub type BoxDynError = Box<dyn Error + Send + Sync + 'static>;
 
