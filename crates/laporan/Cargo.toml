@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["derive"]
+default = ["derive", "pretty", "serde", "json", "tracing"]
+# default = ["derive"]
 derive = ["dep:laporan-derive"]
 pretty = ["dep:owo-colors"]
 serde = ["dep:serde", "smol_str/serde"]

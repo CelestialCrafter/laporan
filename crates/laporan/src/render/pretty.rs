@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use educe::Educe;
 use owo_colors::{OwoColorize, Style};
 
 use crate::{Frame, Level, Location, Metadata, ReportPayload, render::Renderer};
@@ -145,6 +146,7 @@ impl PrettyRenderer {
 }
 
 impl Renderer for PrettyRenderer {
+    #[inline]
     fn render<'a>(&'a self, payload: &'a ReportPayload) -> impl fmt::Display + 'a {
         PrettyDisplayer {
             inner: self,
@@ -159,6 +161,7 @@ struct LinePrinter<'a, 'b> {
 }
 
 impl<'a, 'b> LinePrinter<'a, 'b> {
+    #[inline]
     fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
         if !self.is_first {
             self.fmt.write_str("\n")?;
@@ -176,6 +179,7 @@ struct PrettyDisplayer<'a> {
 }
 
 impl fmt::Display for PrettyDisplayer<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut printer = LinePrinter {
             fmt: f,

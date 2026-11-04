@@ -17,6 +17,7 @@ trait DynRender {
 }
 
 impl<T: Renderer> DynRender for T {
+    #[inline]
     fn render(&self, payload: &ReportPayload, f: &mut fmt::Formatter) -> fmt::Result {
         Renderer::render(self, payload).fmt(f)
     }
@@ -27,6 +28,7 @@ struct GlobalDisplayer<'a> {
 }
 
 impl fmt::Display for GlobalDisplayer<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let renderer = RENDERER.get().map(Box::as_ref).unwrap_or(&SimpleRenderer);
         renderer.render(&self.payload, f)
@@ -44,12 +46,14 @@ impl GlobalRenderer {
     /// so libraries should avoid calling this function.
     ///
     /// Returns `None` if a renderer was already set.
+    #[inline]
     pub fn set(renderer: impl Renderer + Send + Sync + 'static) -> Option<()> {
         RENDERER.set(Box::new(renderer)).ok()
     }
 }
 
 impl Renderer for GlobalRenderer {
+    #[inline]
     fn render(&self, payload: &ReportPayload) -> impl fmt::Display {
         GlobalDisplayer { payload }
     }

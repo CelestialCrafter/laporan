@@ -7,8 +7,6 @@ pub mod layer;
 pub mod prelude;
 pub mod render;
 
-pub use laporan_derive::IntoReport;
-
 use std::{
     any::type_name,
     error::Error,
@@ -62,6 +60,7 @@ pub enum Frame {
 
 impl Frame {
     /// Helper function to create [`Self::Context`]s.
+    #[inline]
     pub fn context<K, V>(key: K, value: V) -> Self
     where
         K: Into<SmolStr>,
@@ -74,11 +73,13 @@ impl Frame {
     }
 
     /// Helper function to create [`Self::Suggestion`]s.
+    #[inline]
     pub fn suggestion(suggestion: impl Into<SmolStr>) -> Frame {
         Self::Suggestion(suggestion.into())
     }
 
     /// Helper function to create [`Self::Attachment`]s.
+    #[inline]
     pub fn attachment(attachment: impl fmt::Display) -> Frame {
         Self::Attachment(attachment.to_smolstr())
     }
@@ -163,6 +164,7 @@ pub struct ReportPayload {
 impl ReportPayload {
     /// Construct a new `ReportPayload`.
     #[track_caller]
+    #[inline]
     pub fn new(message: SmolStr) -> Self {
         Self {
             message,
@@ -182,6 +184,7 @@ impl ReportPayload {
 pub struct ReportError(ReportPayload);
 
 impl Error for ReportError {
+    #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         (self.0.children.len() == 1).then(|| {
             let child = &self.0.children[0];
@@ -193,6 +196,7 @@ impl Error for ReportError {
 }
 
 impl fmt::Display for ReportError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         SimpleRenderer.render(&self.0).fmt(f)
     }
@@ -213,6 +217,7 @@ pub struct Report<E> {
 /// The [`fmt::Debug`] impl for this type defaults to rendering using the [`GlobalRenderer`].
 /// Additionally, the `{:#?}` directive can show the `Report` in a typical [`fmt::Debug`] fashion.
 impl<E> fmt::Debug for Report<E> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
             self.inner.fmt(f)
@@ -223,6 +228,7 @@ impl<E> fmt::Debug for Report<E> {
 }
 
 impl<E> fmt::Display for Report<E> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         SimpleRenderer.render(self).fmt(f)
     }
@@ -231,11 +237,13 @@ impl<E> fmt::Display for Report<E> {
 impl Report<()> {
     /// Constructs a new [`Report`] from a message.
     #[track_caller]
+    #[inline]
     pub fn new(message: impl Into<SmolStr>) -> Self {
         Self::from_payload(ReportPayload::new(message.into()))
     }
 
     /// Converts the underlying [`ReportPayload`] back into a `Report`.
+    #[inline]
     pub fn from_payload(payload: ReportPayload) -> Self {
         Report {
             inner: payload.into(),
@@ -248,6 +256,7 @@ impl Report<()> {
     /// Note that this walks [`Error::source`] to build a tree of children.
     /// To avoid this behavior, consider using [`Report::new`]
     #[track_caller]
+    #[inline]
     pub fn from_error(error: impl Error) -> Self {
         #[track_caller]
         fn walk(error: &dyn Error) -> Report<()> {
@@ -264,17 +273,20 @@ impl Report<()> {
 
 impl<E> Report<E> {
     /// Converts the `Report` into the underlying [`ReportPayload`].
+    #[inline]
     pub fn into_payload(self) -> ReportPayload {
         *self.inner
     }
 
     /// Converts this `Report` into a [`ReportError`]
+    #[inline]
     pub fn into_error(self) -> ReportError {
         ReportError(*self.inner)
     }
 
     /// "Erases" this `Report`s generic parameter to [`()`].
     // NOTE: This should not change self.inner.metadata.type_name like `Self::cast` does.
+    #[inline]
     pub fn erased(self) -> Report<()> {
         Report {
             inner: self.inner,
@@ -283,12 +295,14 @@ impl<E> Report<E> {
     }
 
     /// Sets the level associated with the `Report`.
+    #[inline]
     pub fn with_level(mut self, level: Level) -> Self {
         self.inner.metadata.level = level;
         self
     }
 
     /// Appends a [`Frame`] to this `Report`.
+    #[inline]
     pub fn with_frame(mut self, frame: Frame) -> Self {
         self.inner.frames.push(frame);
         self
@@ -300,12 +314,14 @@ impl<E> Report<E> {
     }
 
     /// Appends a `Report` as a child to this `Report`.
+    #[inline]
     pub fn with_child<F>(mut self, child: Report<F>) -> Self {
         self.inner.children.push(*child.inner);
         self
     }
 
     /// Appends an iterator of `Report`s as children of this `Report`.
+    #[inline]
     pub fn with_children<F>(self, children: impl IntoIterator<Item = Report<F>>) -> Self {
         children.into_iter().fold(self, Report::with_child)
     }
@@ -315,6 +331,7 @@ impl<E> Report<E> {
     /// It's usually not recommended to use this function,
     /// and instead use [`Report::erase`] in place of casting,
     /// but casting can be useful in certain circumstances.
+    #[inline]
     pub fn cast<F>(mut self) -> Report<F> {
         self.inner.metadata.type_name = SmolStr::new_static(type_name::<F>());
         Report {
@@ -340,10 +357,12 @@ pub trait ReportExt<T> {
 }
 
 impl<T, U: Into<Report<T>>> ReportExt<T> for U {
+    #[inline]
     fn wrap<V: IntoReport + Default>(self) -> Report<V> {
         V::default().into_report().with_child(self.into())
     }
 
+    #[inline]
     fn wrap_with<V>(self, parent: impl Into<Report<V>>) -> Report<V> {
         parent.into().with_child(self.into())
     }
@@ -400,6 +419,7 @@ pub trait ResultReportExt<T, E>: Sized {
 
 // we can't use [`Result::map_err`] in any of these since `#[track_caller]` on closures is unstable
 impl<T, E, D: Into<Report<E>>> ResultReportExt<T, E> for StdResult<T, D> {
+    #[inline]
     fn into_error(self) -> StdResult<T, impl Error + Send + Sync + 'static> {
         match self {
             Ok(t) => Ok(t),
@@ -407,6 +427,7 @@ impl<T, E, D: Into<Report<E>>> ResultReportExt<T, E> for StdResult<T, D> {
         }
     }
 
+    #[inline]
     fn erased(self) -> Result<T, ()> {
         match self {
             Ok(t) => Ok(t),
@@ -414,6 +435,7 @@ impl<T, E, D: Into<Report<E>>> ResultReportExt<T, E> for StdResult<T, D> {
         }
     }
 
+    #[inline]
     fn wrap_with_fn<F, G: Into<Report<F>>>(self, parent: impl FnOnce() -> G) -> Result<T, F> {
         match self {
             Ok(t) => Ok(t),
@@ -421,6 +443,7 @@ impl<T, E, D: Into<Report<E>>> ResultReportExt<T, E> for StdResult<T, D> {
         }
     }
 
+    #[inline]
     fn with_level(self, level: Level) -> Result<T, E> {
         match self {
             Ok(t) => Ok(t),
@@ -428,6 +451,7 @@ impl<T, E, D: Into<Report<E>>> ResultReportExt<T, E> for StdResult<T, D> {
         }
     }
 
+    #[inline]
     fn with_frame(self, frame: impl FnOnce() -> Frame) -> Result<T, E> {
         match self {
             Ok(t) => Ok(t),
@@ -457,6 +481,7 @@ where
     E: Error + 'static,
     E: Send + Sync,
 {
+    #[inline]
     fn into_report(self) -> Report<Self> {
         Report::from_error(self).cast()
     }
@@ -464,6 +489,7 @@ where
 
 impl<T: IntoReport> From<T> for Report<T> {
     #[track_caller]
+    #[inline]
     fn from(value: T) -> Self {
         value.into_report()
     }
@@ -481,6 +507,7 @@ macro_rules! impl_compat {
 
         $(impl<T> $name<T, $error> for ::std::result::Result<T, $error> {
             #[track_caller]
+            #[inline]
             fn compat(self) -> ::std::result::Result<T, $crate::Report<$error>> {
                 #[track_caller]
                 fn convert($argument: $error) -> $crate::Report<$error> {

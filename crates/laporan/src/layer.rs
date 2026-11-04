@@ -95,6 +95,7 @@ pub struct ReportLayer<R, W> {
 
 impl ReportLayer<GlobalRenderer, fn() -> std::io::Stderr> {
     /// Constructs a new `ReportLayer`.
+    #[inline]
     pub fn new() -> Self {
         Self {
             renderer: GlobalRenderer,
@@ -105,6 +106,7 @@ impl ReportLayer<GlobalRenderer, fn() -> std::io::Stderr> {
 
 impl<R, W> ReportLayer<R, W> {
     /// Sets the [`Renderer`] this layer uses to display reports.
+    #[inline]
     pub fn with_renderer<T>(self, renderer: T) -> ReportLayer<T, W> {
         ReportLayer {
             renderer,
@@ -113,6 +115,7 @@ impl<R, W> ReportLayer<R, W> {
     }
 
     /// Sets the [`MakeWriter`] this layer uses to write events.
+    #[inline]
     pub fn with_writer<X>(self, writer: X) -> ReportLayer<R, X> {
         ReportLayer {
             renderer: self.renderer,

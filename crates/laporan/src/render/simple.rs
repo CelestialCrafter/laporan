@@ -13,12 +13,13 @@ pub struct SimpleRenderer;
 impl SimpleRenderer {
     /// Constructs a new `SimpleRenderer`.
     #[inline]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }
 
 impl Renderer for SimpleRenderer {
+    #[inline]
     fn render(&self, report: &ReportPayload) -> impl fmt::Display {
         &report.message
     }

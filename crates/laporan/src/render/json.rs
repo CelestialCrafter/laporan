@@ -11,6 +11,7 @@ struct JsonDisplayer<'a> {
 }
 
 impl fmt::Display for JsonDisplayer<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let serialize = if self.inner.pretty {
             serde_json::to_string_pretty
@@ -35,12 +36,13 @@ pub struct JsonRenderer {
 impl JsonRenderer {
     /// Constructs a new `JsonRenderer`.
     #[inline]
-    pub fn new() -> Self {
-        Default::default()
+    pub const fn new() -> Self {
+        Self { pretty: false }
     }
 }
 
 impl Renderer for JsonRenderer {
+    #[inline]
     fn render<'a>(&'a self, payload: &'a ReportPayload) -> impl fmt::Display + 'a {
         JsonDisplayer {
             inner: self,
