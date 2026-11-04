@@ -2,7 +2,6 @@
 
 use std::{any::type_name, error::Error, fmt, io::Write};
 
-use smol_str::{SmolStr, ToSmolStr};
 use tracing::{Event, Subscriber, field, span};
 use tracing_subscriber::{Layer, fmt::MakeWriter, layer::Context, registry::LookupSpan};
 
@@ -13,7 +12,7 @@ use crate::{
 
 #[derive(Default)]
 struct RecordVisitor {
-    message: Option<SmolStr>,
+    message: Option<String>,
     frames: Vec<Frame>,
     children: Vec<ReportPayload>,
 }
@@ -33,7 +32,7 @@ impl field::Visit for RecordVisitor {
 
         let value = format_args!("{value:?}");
         match field.name() {
-            "message" => self.message = Some(value.to_smolstr()),
+            "message" => self.message = Some(value.to_string()),
             "attachment" => self.frames.push(Frame::attachment(value)),
             key => self.frames.push(Frame::context(key, value)),
         }
@@ -49,12 +48,14 @@ impl field::Visit for RecordVisitor {
 }
 
 fn metadata_to_payload(metadata: &tracing::Metadata, visitor: RecordVisitor) -> ReportPayload {
+    let type_name = type_name::<Event>().to_string();
+
     let message = if metadata.is_span() {
-        metadata.name().to_smolstr()
+        metadata.name().to_string()
     } else {
         visitor
             .message
-            .unwrap_or(SmolStr::new_static("no message specified"))
+            .unwrap_or("no message specified".to_string())
     };
 
     let level = match *metadata.level() {
@@ -65,7 +66,6 @@ fn metadata_to_payload(metadata: &tracing::Metadata, visitor: RecordVisitor) -> 
         tracing::Level::ERROR => Level::Error,
     };
 
-    let type_name = SmolStr::new_static(type_name::<Event>());
     let location = metadata
         .file()
         .map(|name| Location::File {
@@ -80,9 +80,9 @@ fn metadata_to_payload(metadata: &tracing::Metadata, visitor: RecordVisitor) -> 
         children: visitor.children,
         message,
         metadata: Metadata {
+            type_name,
             location,
             level,
-            type_name,
         },
     }
 }

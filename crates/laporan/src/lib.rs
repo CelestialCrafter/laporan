@@ -18,7 +18,6 @@ use std::{
 };
 
 use educe::Educe;
-use smol_str::{SmolStr, ToSmolStr};
 
 use crate::render::{GlobalRenderer, Renderer, SimpleRenderer};
 
@@ -43,19 +42,19 @@ pub enum Frame {
     /// ids, timestamps, commands, etc.
     Context {
         /// Name of the context field
-        key: SmolStr,
+        key: String,
         /// Value associated with the key
-        value: SmolStr,
+        value: String,
     },
     /// A long-form piece of information.
     ///
     /// This can be used to attach more detailed data such as:
     /// stderr, build logs, files, etc.
-    Attachment(SmolStr),
+    Attachment(String),
     /// An inline suggestion
     ///
     /// This can be used to suggest actions to users to resolve issues.
-    Suggestion(SmolStr),
+    Suggestion(String),
 }
 
 impl Frame {
@@ -63,25 +62,25 @@ impl Frame {
     #[inline]
     pub fn context<K, V>(key: K, value: V) -> Self
     where
-        K: Into<SmolStr>,
+        K: Into<String>,
         V: fmt::Display,
     {
         Self::Context {
             key: key.into(),
-            value: value.to_smolstr(),
+            value: value.to_string(),
         }
     }
 
     /// Helper function to create [`Self::Suggestion`]s.
     #[inline]
-    pub fn suggestion(suggestion: impl Into<SmolStr>) -> Frame {
+    pub fn suggestion(suggestion: impl Into<String>) -> Frame {
         Self::Suggestion(suggestion.into())
     }
 
     /// Helper function to create [`Self::Attachment`]s.
     #[inline]
     pub fn attachment(attachment: impl fmt::Display) -> Frame {
-        Self::Attachment(attachment.to_smolstr())
+        Self::Attachment(attachment.to_string())
     }
 }
 
@@ -92,14 +91,14 @@ pub enum Location {
     /// A location pointing to a file
     File {
         /// The name of the file
-        name: SmolStr,
+        name: String,
         /// Optionally, the line within the file
         line: Option<u32>,
         /// Optionally, the column within the line
         column: Option<u32>,
     },
     /// A location pointing to a module
-    Module(SmolStr),
+    Module(String),
     /// An unknown locatiion
     #[default]
     Unknown,
@@ -128,7 +127,7 @@ pub struct Metadata {
     /// The name of the type associated with the [`Report`]
     ///
     /// Note: This field has the same semantics as [`type_name`]
-    pub type_name: SmolStr,
+    pub type_name: String,
 }
 
 impl Metadata {
@@ -141,7 +140,7 @@ impl Metadata {
                 line: Some(std_location.line()),
                 column: Some(std_location.column()),
             },
-            type_name: SmolStr::new_static(type_name::<()>()),
+            type_name: type_name::<()>().to_string(),
             level: Level::Error,
         }
     }
@@ -156,7 +155,7 @@ pub struct ReportPayload {
     /// Child reports that caused this report.
     pub children: Vec<ReportPayload>,
     /// Main message attached to this report.
-    pub message: SmolStr,
+    pub message: String,
     /// Other metadata associated with the report, such as creation location.
     pub metadata: Metadata,
 }
@@ -165,7 +164,7 @@ impl ReportPayload {
     /// Construct a new `ReportPayload`.
     #[track_caller]
     #[inline]
-    pub fn new(message: SmolStr) -> Self {
+    pub fn new(message: String) -> Self {
         Self {
             message,
             metadata: Metadata::new(),
@@ -238,7 +237,7 @@ impl Report<()> {
     /// Constructs a new [`Report`] from a message.
     #[track_caller]
     #[inline]
-    pub fn new(message: impl Into<SmolStr>) -> Self {
+    pub fn new(message: impl Into<String>) -> Self {
         Self::from_payload(ReportPayload::new(message.into()))
     }
 
@@ -260,7 +259,7 @@ impl Report<()> {
     pub fn from_error(error: impl Error) -> Self {
         #[track_caller]
         fn walk(error: &dyn Error) -> Report<()> {
-            let report = Report::new(error.to_smolstr());
+            let report = Report::new(error.to_string());
             match error.source() {
                 Some(source) => report.with_child(walk(source)),
                 None => report,
@@ -333,7 +332,8 @@ impl<E> Report<E> {
     /// but casting can be useful in certain circumstances.
     #[inline]
     pub fn cast<F>(mut self) -> Report<F> {
-        self.inner.metadata.type_name = SmolStr::new_static(type_name::<F>());
+        self.inner.metadata.type_name = type_name::<F>().to_string();
+
         Report {
             inner: self.inner,
             _marker: PhantomData,

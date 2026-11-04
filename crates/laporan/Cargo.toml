@@ -8,14 +8,13 @@ default = ["derive", "pretty", "serde", "json", "tracing"]
 # default = ["derive"]
 derive = ["dep:laporan-derive"]
 pretty = ["dep:owo-colors"]
-serde = ["dep:serde", "smol_str/serde"]
+serde = ["dep:serde"]
 json = ["dep:serde_json", "serde"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 
 [dependencies]
 laporan-derive = { path = "../laporan-derive", optional = true }
 educe = "0.6.0"
-smol_str = "0.3.5"
 tracing = { version = "0.1.44", optional = true }
 tracing-subscriber = { version = "0.3.23", optional = true }
 serde = { version = "1.0.228", features = ["derive"], optional = true }
