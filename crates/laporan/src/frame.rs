@@ -1,4 +1,6 @@
-use std::{any::Any, fmt};
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
+use core::{any::Any, fmt};
 
 /// A single arbitrary key-value pair.
 ///
@@ -125,7 +127,7 @@ impl<T: Frame> DynFrame for T {
 
     #[cfg(feature = "serde")]
     fn type_name(&self) -> &'static str {
-        std::any::type_name::<T>()
+        core::any::type_name::<T>()
     }
 
     fn clone_inner(&self) -> Box<dyn DynFrame> {

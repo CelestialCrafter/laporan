@@ -1,6 +1,9 @@
 //! Error handling crate, split off from Xuehua
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs)]
+
+extern crate alloc;
 
 pub mod error;
 pub mod ext;
@@ -11,13 +14,19 @@ pub mod prelude;
 pub mod render;
 pub mod util;
 
-use std::{
+use core::{
     any::type_name,
     error::Error,
     fmt::{self, Display},
     marker::PhantomData,
     panic::Location as StdLocation,
     result::Result as StdResult,
+};
+
+use alloc::{
+    boxed::Box,
+    string::{String, ToString},
+    vec::Vec,
 };
 
 use educe::Educe;
@@ -84,7 +93,7 @@ pub struct Metadata {
     /// The name of the type associated with the [`Report`]
     ///
     /// Note: This field has the same semantics as [`type_name`]
-    #[educe(Default(expr = std::any::type_name::<()>()))]
+    #[educe(Default(expr = core::any::type_name::<()>()))]
     pub type_name: &'static str,
 }
 
@@ -92,6 +101,7 @@ impl Metadata {
     #[track_caller]
     fn new() -> Self {
         let location = StdLocation::caller();
+
         Self {
             location: Location::File {
                 name: location.file().to_string(),
@@ -143,7 +153,7 @@ impl RawReport {
     pub fn frames_of<T: 'static>(&self) -> impl DoubleEndedIterator<Item = &T> {
         self.frames
             .iter()
-            .filter_map(|frame| (frame.as_ref() as &dyn std::any::Any).downcast_ref())
+            .filter_map(|frame| (frame.as_ref() as &dyn core::any::Any).downcast_ref())
     }
 }
 

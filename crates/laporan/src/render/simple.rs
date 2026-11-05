@@ -1,6 +1,6 @@
 //! Default rendering for [`Report`]s.
 
-use std::fmt;
+use core::fmt;
 
 use crate::{RawReport, render::Renderer};
 

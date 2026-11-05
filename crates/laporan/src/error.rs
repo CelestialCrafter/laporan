@@ -1,4 +1,4 @@
-use std::{error::Error, fmt};
+use core::{error::Error, fmt};
 
 use crate::{
     RawReport, Report,
@@ -40,7 +40,7 @@ impl Error for ReportError {
         // SAFETY: `Self` is repr(transparent) over `RawReport`.
         // SAFETY: The pointer we are dereferencing came from a valid reference.
         let error = unsafe {
-            std::ptr::from_ref::<RawReport>(raw)
+            core::ptr::from_ref::<RawReport>(raw)
                 .cast::<ReportError>()
                 .as_ref_unchecked()
         };

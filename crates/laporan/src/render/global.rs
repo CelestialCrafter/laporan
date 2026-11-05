@@ -29,13 +29,13 @@ struct GlobalDisplayer<'a> {
 
 impl fmt::Display for GlobalDisplayer<'_> {
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let renderer = match RENDERER.get() {
             Some(global) => global.as_ref(),
             None => &SimpleRenderer,
         };
 
-        renderer.render(self.raw, f)
+        renderer.render(self.raw, formatter)
     }
 }
 

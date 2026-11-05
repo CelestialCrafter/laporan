@@ -1,20 +1,20 @@
-use std::{iter::once, result::Result as StdResult};
+use core::{iter::once, result::Result as StdResult};
 
 /// Defines a Compat trait for populating common error types.
 #[macro_export]
 macro_rules! impl_compat {
     ($name:ident, $(($error:path, |$argument:ident| $block:expr)),* $(,)?) => {
         /// Helper trait for populating common error types.
-        pub trait $name<T, E>: Sized {
+            pub trait $name<T, E>: Sized {
             /// Converts this error into a pre-populated [`Report`]($crate::Report).
             #[must_use]
-            fn compat(self) -> ::std::result::Result<T, $crate::Report<E>>;
+            fn compat(self) -> ::core::result::Result<T, $crate::Report<E>>;
         }
 
-        $(impl<T> $name<T, $error> for ::std::result::Result<T, $error> {
+        $(impl<T> $name<T, $error> for ::core::result::Result<T, $error> {
             #[track_caller]
             #[inline]
-            fn compat(self) -> ::std::result::Result<T, $crate::Report<$error>> {
+            fn compat(self) -> ::core::result::Result<T, $crate::Report<$error>> {
                 #[allow(unused_variables)]
                 #[track_caller]
                 fn convert($argument: $error) -> $crate::Report<$error> {

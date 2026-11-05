@@ -1,6 +1,6 @@
 //! Pretty rendering for [`Report`]s.
 
-use std::{fmt, io::IsTerminal};
+use core::fmt;
 
 use educe::Educe;
 use owo_colors::Style;
@@ -199,9 +199,12 @@ impl PrettyRenderer {
     ///
     /// Color is enabled if `FORCE_COLOR` is set or stderr is a tty, and is disabled if `NO_COLOR` is set.
     /// Additionally, `FORCE_COLOR` has higher priority than `NO_COLOR`.
+    #[cfg(feature = "std")]
     #[inline]
     #[must_use]
     pub fn from_env() -> Self {
+        use std::io::IsTerminal;
+
         let exists = |name: &str| std::env::var_os(name).is_some();
         let color = if exists("FORCE_COLOR") {
             true

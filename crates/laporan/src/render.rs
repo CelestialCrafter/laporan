@@ -7,7 +7,7 @@ pub mod json;
 pub mod pretty;
 pub mod simple;
 
-use std::fmt;
+use core::fmt;
 
 pub use global::GlobalRenderer;
 #[cfg(feature = "json")]

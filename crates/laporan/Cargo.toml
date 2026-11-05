@@ -8,13 +8,14 @@ homepage = "https://github.com/CelestialCrafter/laporan"
 repository = "https://github.com/CelestialCrafter/laporan"
 
 [features]
-default = ["derive", "pretty", "serde", "json", "tracing"]
-# default = ["derive"]
+default = ["std", "derive", "pretty", "serde", "json", "tracing"]
+# default = [ "derive" ]
+std = []
 derive = ["dep:laporan-derive"]
 pretty = ["dep:owo-colors"]
 serde = ["dep:serde", "dep:erased-serde"]
 json = ["dep:serde_json", "serde"]
-tracing = ["dep:tracing", "dep:tracing-subscriber"]
+tracing = ["dep:tracing", "dep:tracing-subscriber", "std"]
 
 [dependencies]
 laporan-derive = { version = "0.1.0", path = "../laporan-derive", optional = true }

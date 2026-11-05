@@ -1,4 +1,4 @@
-use std::{error::Error, result::Result as StdResult};
+use core::{error::Error, result::Result as StdResult};
 
 use crate::{ErasedResult, IntoReport, Level, Report, Result, error, frame::Frame};
 
