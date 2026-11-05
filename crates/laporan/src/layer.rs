@@ -6,7 +6,8 @@ use tracing::{Event, Subscriber, field, span};
 use tracing_subscriber::{Layer, fmt::MakeWriter, layer::Context, registry::LookupSpan};
 
 use crate::{
-    Frame, Level, Location, Metadata, Report, ReportError, ReportPayload,
+    Level, Location, Metadata, Report, ReportError, ReportPayload,
+    frame::{self, Frame},
     render::{GlobalRenderer, Renderer},
 };
 
@@ -20,7 +21,7 @@ struct RecordVisitor {
 impl field::Visit for RecordVisitor {
     fn record_str(&mut self, field: &field::Field, value: &str) {
         match field.name() {
-            "suggestion" => self.frames.push(Frame::suggestion(value)),
+            "suggestion" => self.frames.push(frame::Suggestion::new(value).into()),
             _ => self.record_debug(field, &value),
         }
     }
@@ -33,8 +34,8 @@ impl field::Visit for RecordVisitor {
         let value = format_args!("{value:?}");
         match field.name() {
             "message" => self.message = Some(value.to_string()),
-            "attachment" => self.frames.push(Frame::attachment(value)),
-            key => self.frames.push(Frame::context(key, value)),
+            "attachment" => self.frames.push(frame::Attachment::new(value).into()),
+            key => self.frames.push(frame::Context::new(key, value).into()),
         }
     }
 
