@@ -1,6 +1,6 @@
 //! Pretty rendering for [`Report`]s.
 
-use std::fmt;
+use std::{fmt, io::IsTerminal};
 
 use educe::Educe;
 use owo_colors::Style;
@@ -63,7 +63,7 @@ impl Styles {
             context: Style::new().cyan(),
             attachment: Style::new().yellow(),
             location: Style::new().purple(),
-            distracting: Style::new(),
+            distracting: Style::new().bright_black(),
             log: LogStyles::new(),
         }
     }
@@ -182,21 +182,41 @@ impl Default for Config {
 /// [`Report`]s can be rendered via the [`Renderer`] trait.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct PrettyRenderer {
-    /// Configuration for this renderer
     config: Config,
 }
 
 impl PrettyRenderer {
     /// Constructs a new `PrettyRenderer`.
-    ///
-    /// The default value for `Config::color` depends on `FORCE_COLOR` and `NO_COLOR`.
     #[inline]
     #[must_use]
-    pub fn new() -> Self {
-        let mut config = Config::new();
-        config.color = colors_enabled_from_env();
-        owo_colors::set_override(config.color);
-        Self { config }
+    pub const fn new() -> Self {
+        Self {
+            config: Config::new(),
+        }
+    }
+
+    /// Constructs a new `PrettyRenderer` with default settings derived from the environment.
+    ///
+    /// Color is enabled if `FORCE_COLOR` is set or stderr is a tty, and is disabled if `NO_COLOR` is set.
+    /// Additionally, `FORCE_COLOR` has higher priority than `NO_COLOR`.
+    #[inline]
+    #[must_use]
+    pub fn from_env() -> Self {
+        let exists = |name: &str| std::env::var_os(name).is_some();
+        let color = if exists("FORCE_COLOR") {
+            true
+        } else if exists("NO_COLOR") {
+            false
+        } else {
+            std::io::stderr().is_terminal()
+        };
+
+        Self {
+            config: Config {
+                color,
+                ..Default::default()
+            },
+        }
     }
 
     /// Replaces the underlying render configuration for this renderer.
@@ -205,17 +225,6 @@ impl PrettyRenderer {
     pub const fn with_config(mut self, config: Config) -> Self {
         self.config = config;
         self
-    }
-}
-
-// FIX: remove/rework this once no_std environments are supported
-fn colors_enabled_from_env() -> bool {
-    let set_non_empty = |name: &str| std::env::var_os(name).is_some_and(|value| !value.is_empty());
-
-    if set_non_empty("FORCE_COLOR") {
-        true
-    } else {
-        !set_non_empty("NO_COLOR")
     }
 }
 
@@ -234,15 +243,6 @@ impl<T: fmt::Display> fmt::Display for MaybeStyled<T> {
     }
 }
 
-#[inline]
-fn paint<T: fmt::Display>(enabled: bool, value: T, style: Style) -> MaybeStyled<T> {
-    if enabled {
-        MaybeStyled::Styled(style.style(value))
-    } else {
-        MaybeStyled::Plain(value)
-    }
-}
-
 impl Renderer for PrettyRenderer {
     #[inline]
     fn render<'a>(&'a self, payload: &'a ReportPayload) -> impl fmt::Display + 'a {
@@ -255,17 +255,17 @@ impl Renderer for PrettyRenderer {
 
 struct LinePrinter<'a, 'b> {
     fmt: &'a mut fmt::Formatter<'b>,
-    is_first: bool,
+    first: bool,
 }
 
 impl LinePrinter<'_, '_> {
     #[inline]
     fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
-        if !self.is_first {
+        if !self.first {
             self.fmt.write_str("\n")?;
         }
 
-        self.is_first = false;
+        self.first = false;
         self.fmt.write_fmt(args)
     }
 }
@@ -281,7 +281,7 @@ impl fmt::Display for PrettyDisplayer<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut printer = LinePrinter {
             fmt: f,
-            is_first: true,
+            first: true,
         };
 
         self.render_report(
@@ -294,6 +294,42 @@ impl fmt::Display for PrettyDisplayer<'_> {
 }
 
 impl PrettyDisplayer<'_> {
+    #[inline]
+    fn render_value<T: fmt::Display>(&self, value: T, style: Style) -> MaybeStyled<T> {
+        if self.inner.config.color {
+            MaybeStyled::Styled(style.style(value))
+        } else {
+            MaybeStyled::Plain(value)
+        }
+    }
+
+    #[inline]
+    fn with_fallback<'a>(&self, text: &'a str, fallback: &'static str) -> &'a str {
+        if text.is_empty() { fallback } else { text }
+    }
+
+    fn write_block(
+        &self,
+        printer: &mut LinePrinter<'_, '_>,
+        prefix: fmt::Arguments<'_>,
+        first_prefix: fmt::Arguments<'_>,
+        content: &str,
+        style: Style,
+    ) -> fmt::Result {
+        let mut lines = content.lines();
+
+        write!(
+            printer,
+            "{prefix}{first_prefix}{}",
+            self.render_value(lines.next().unwrap_or(""), style)
+        )?;
+
+        lines.into_iter().try_for_each(|line| {
+            let line = self.render_value(line, style);
+            write!(printer, "{prefix}  {line}")
+        })
+    }
+
     fn render_report(
         &self,
         printer: &mut LinePrinter<'_, '_>,
@@ -301,37 +337,26 @@ impl PrettyDisplayer<'_> {
         prefix: fmt::Arguments<'_>,
         next_prefix: fmt::Arguments<'_>,
     ) -> fmt::Result {
-        let color = self.inner.config.color;
         let log_headers = &self.inner.config.headers.log;
         let guides = &self.inner.config.guides;
         let styles = &self.inner.config.styles;
 
         let log_header = match payload.metadata.level {
-            Level::Error => paint(color, log_headers.error, styles.log.error),
-            Level::Warn => paint(color, log_headers.warn, styles.log.warn),
-            Level::Info => paint(color, log_headers.info, styles.log.info),
-            Level::Debug => paint(color, log_headers.debug, styles.log.debug),
-            Level::Trace => paint(color, log_headers.trace, styles.log.trace),
+            Level::Error => self.render_value(log_headers.error, styles.log.error),
+            Level::Warn => self.render_value(log_headers.warn, styles.log.warn),
+            Level::Info => self.render_value(log_headers.info, styles.log.info),
+            Level::Debug => self.render_value(log_headers.debug, styles.log.debug),
+            Level::Trace => self.render_value(log_headers.trace, styles.log.trace),
         };
 
-        let message = if payload.message.is_empty() {
-            "no message"
-        } else {
-            payload.message.as_str()
-        };
-
-        let message_style = Style::new().bold();
-        let mut message_lines = message.lines();
-        let first = message_lines.next().unwrap_or("");
-        write!(
+        let message = self.with_fallback(&payload.message, "no message");
+        self.write_block(
             printer,
-            "{prefix}{} {}",
-            log_header,
-            paint(color, first, message_style)
+            prefix,
+            format_args!("{} ", log_header),
+            message,
+            Style::new().bold(),
         )?;
-        for line in message_lines {
-            write!(printer, "{prefix}  {}", paint(color, line, message_style))?;
-        }
 
         let guide = if payload.children.is_empty() {
             guides.empty
@@ -339,7 +364,7 @@ impl PrettyDisplayer<'_> {
             guides.line
         };
 
-        let sub_prefix = format_args!("{}{}", next_prefix, paint(color, guide, styles.guides));
+        let sub_prefix = format_args!("{}{}", next_prefix, self.render_value(guide, styles.guides));
         self.render_frames(printer, payload, sub_prefix)?;
         self.render_extra(printer, &payload.metadata, sub_prefix)?;
         self.render_children(printer, &payload.children, next_prefix)
@@ -351,27 +376,31 @@ impl PrettyDisplayer<'_> {
         metadata: &Metadata,
         prefix: fmt::Arguments<'_>,
     ) -> fmt::Result {
-        let color = self.inner.config.color;
         let headers = &self.inner.config.headers;
         let styles = &self.inner.config.styles;
         let mut write_location = |value: fmt::Arguments<'_>| {
             write!(
                 printer,
                 "{prefix}{} {}",
-                paint(color, headers.location, styles.location),
-                paint(color, value, styles.distracting)
+                self.render_value(headers.location, styles.location),
+                self.render_value(value, styles.distracting)
             )
         };
 
         match &metadata.location {
-            Location::File { name, line, column } => match (line, column) {
-                (Some(line), Some(column)) => {
-                    write_location(format_args!("{name}:{line}:{column}"))
-                }
-                (Some(line), None) => write_location(format_args!("{name}:{line}")),
-                _ => write_location(format_args!("{name}")),
-            },
-            Location::Module(name) => write_location(format_args!("{name}")),
+            Location::File {
+                name,
+                line: Some(line),
+                column: Some(column),
+            } => write_location(format_args!("{name}:{line}:{column}")),
+            Location::File {
+                name,
+                line: Some(line),
+                column: None,
+            } => write_location(format_args!("{name}:{line}")),
+            Location::Module(name) | Location::File { name, .. } => {
+                write_location(format_args!("{name}"))
+            }
             Location::Unknown => Ok(()),
         }
     }
@@ -384,87 +413,58 @@ impl PrettyDisplayer<'_> {
         payload: &ReportPayload,
         prefix: fmt::Arguments<'_>,
     ) -> fmt::Result {
-        let color = self.inner.config.color;
         let headers = &self.inner.config.headers;
         let styles = &self.inner.config.styles;
 
         // suggestion pass
         for Suggestion { content } in payload.frames_of::<Suggestion>() {
-            let content = if content.is_empty() {
-                "no suggestion"
-            } else {
-                content.as_str()
-            };
-            let mut lines = content.lines();
-            let first = lines.next().unwrap_or("");
-            write!(
+            self.write_block(
                 printer,
-                "{prefix}{} {}",
-                paint(color, headers.suggestion, styles.suggestion),
-                first
+                prefix,
+                format_args!(
+                    "{} ",
+                    self.render_value(headers.suggestion, styles.suggestion)
+                ),
+                self.with_fallback(content, "no suggestion"),
+                Style::new(),
             )?;
-            for line in lines {
-                write!(printer, "{prefix}  {line}")?;
-            }
         }
 
         // context pass
-        let mut first_context = true;
-        for Context { key, value } in payload.frames_of::<Context>() {
-            if first_context {
-                write!(
-                    printer,
-                    "{prefix}{}",
-                    paint(color, headers.context, styles.context)
-                )?;
-                first_context = false;
-            }
+        payload
+            .frames_of::<Context>()
+            .try_fold(true, |first, Context { key, value }| {
+                if first {
+                    write!(
+                        printer,
+                        "{prefix}{}",
+                        self.render_value(headers.context, styles.context)
+                    )?;
+                }
 
-            let key = if key.is_empty() {
-                "no key"
-            } else {
-                key.as_str()
-            };
-            let value = if value.is_empty() {
-                "no value"
-            } else {
-                value.as_str()
-            };
-            let mut lines = value.lines();
-            let first = lines.next().unwrap_or("");
-            write!(
-                printer,
-                "{prefix}  {}: {}",
-                paint(color, key, styles.distracting),
-                paint(color, first, styles.distracting)
-            )?;
-            for line in lines {
                 write!(
                     printer,
-                    "{prefix}    {}",
-                    paint(color, line, styles.distracting)
+                    "{prefix}  {}: {}",
+                    self.render_value(self.with_fallback(key, "no key"), styles.distracting),
+                    self.render_value(self.with_fallback(value, "no value"), styles.distracting)
                 )?;
-            }
-        }
+
+                Ok(false)
+            })?;
 
         // attachment pass
         for Attachment { content } in payload.frames_of::<Attachment>() {
             write!(
                 printer,
                 "{prefix}{}",
-                paint(color, headers.attachment, styles.attachment)
+                self.render_value(headers.attachment, styles.attachment)
             )?;
 
-            let content = if content.is_empty() {
-                "no content"
-            } else {
-                content.as_str()
-            };
-            for line in content.lines() {
+            for line in self.with_fallback(content, "no content").lines() {
                 write!(
                     printer,
                     "{prefix}  {}",
-                    paint(color, line, styles.distracting)
+                    self.render_value(line, styles.distracting)
                 )?;
             }
         }
@@ -478,7 +478,6 @@ impl PrettyDisplayer<'_> {
         children: &[ReportPayload],
         prefix: fmt::Arguments<'_>,
     ) -> fmt::Result {
-        let color = self.inner.config.color;
         let guides = &self.inner.config.guides;
         let styles = &self.inner.config.styles;
 
@@ -491,10 +490,11 @@ impl PrettyDisplayer<'_> {
             } else {
                 guides.branch
             };
-            let next_prefix = format_args!("{}{}", prefix, paint(color, guide, styles.guides));
+            let next_prefix = format_args!("{}{}", prefix, self.render_value(guide, styles.guides));
 
             let guide = if last { guides.empty } else { guides.line };
-            let next_next_prefix = format_args!("{}{}", prefix, paint(color, guide, styles.guides));
+            let next_next_prefix =
+                format_args!("{}{}", prefix, self.render_value(guide, styles.guides));
 
             self.render_report(printer, child, next_prefix, next_next_prefix)?;
         }
