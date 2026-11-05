@@ -8,10 +8,11 @@ homepage = "https://github.com/CelestialCrafter/laporan"
 repository = "https://github.com/CelestialCrafter/laporan"
 
 [features]
-default = ["derive"]
+default = ["derive", "pretty", "serde", "json", "tracing"]
+# default = ["derive"]
 derive = ["dep:laporan-derive"]
 pretty = ["dep:owo-colors"]
-serde = ["dep:serde"]
+serde = ["dep:serde", "dep:erased-serde"]
 json = ["dep:serde_json", "serde"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 
@@ -23,3 +24,4 @@ tracing-subscriber = { version = "0.3.23", optional = true }
 serde = { version = "1.0.229", features = ["derive"], optional = true }
 serde_json = { version = "1.0.154", optional = true }
 owo-colors = { version = "4.4.0", optional = true }
+erased-serde = { version = "0.4.11", optional = true }

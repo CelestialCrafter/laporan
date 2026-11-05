@@ -5,7 +5,11 @@ use std::fmt;
 use educe::Educe;
 use owo_colors::{OwoColorize, Style};
 
-use crate::{Frame, Level, Location, Metadata, ReportPayload, render::Renderer};
+use crate::{
+    Level, Location, Metadata, ReportPayload,
+    frame::{Attachment, Context, Suggestion},
+    render::Renderer,
+};
 
 /// Styles for each log level.
 #[derive(Educe, Debug, Copy, Clone)]
@@ -251,16 +255,16 @@ impl PrettyDisplayer<'_> {
         prefix: fmt::Arguments<'_>,
         next_prefix: fmt::Arguments<'_>,
     ) -> fmt::Result {
-        let headers = &self.inner.config.headers;
+        let log_headers = &self.inner.config.headers.log;
         let guides = &self.inner.config.guides;
         let styles = &self.inner.config.styles;
 
         let log_header = match payload.metadata.level {
-            Level::Error => headers.log.error.style(styles.log.error),
-            Level::Warn => headers.log.warn.style(styles.log.warn),
-            Level::Info => headers.log.info.style(styles.log.info),
-            Level::Debug => headers.log.debug.style(styles.log.debug),
-            Level::Trace => headers.log.trace.style(styles.log.trace),
+            Level::Error => log_headers.error.style(styles.log.error),
+            Level::Warn => log_headers.warn.style(styles.log.warn),
+            Level::Info => log_headers.info.style(styles.log.info),
+            Level::Debug => log_headers.debug.style(styles.log.debug),
+            Level::Trace => log_headers.trace.style(styles.log.trace),
         };
 
         write!(printer, "{prefix}{} {}", log_header, payload.message.bold())?;
@@ -272,7 +276,7 @@ impl PrettyDisplayer<'_> {
         };
 
         let sub_prefix = format_args!("{}{}", next_prefix, guide.style(styles.guides));
-        self.render_frames(printer, &payload.frames, sub_prefix)?;
+        self.render_frames(printer, payload, sub_prefix)?;
         self.render_extra(printer, &payload.metadata, sub_prefix)?;
         self.render_children(printer, &payload.children, next_prefix)
     }
@@ -312,61 +316,57 @@ impl PrettyDisplayer<'_> {
     fn render_frames(
         &self,
         printer: &mut LinePrinter<'_, '_>,
-        frames: &[Frame],
+        payload: &ReportPayload,
         prefix: fmt::Arguments<'_>,
     ) -> fmt::Result {
         let headers = &self.inner.config.headers;
         let styles = &self.inner.config.styles;
 
         // suggestion pass
-        for frame in frames {
-            let Frame::Suggestion(suggestion) = frame else {
-                continue;
-            };
-
-            write!(
-                printer,
-                "{prefix}{} {}",
-                headers.suggestion.style(styles.suggestion),
-                suggestion
-            )?;
-        }
+        payload
+            .frames_of::<Suggestion>()
+            .try_for_each(|Suggestion { content }| {
+                write!(
+                    printer,
+                    "{prefix}{} {}",
+                    headers.suggestion.style(styles.suggestion),
+                    content
+                )
+            })?;
 
         // context pass
-        let mut first = true;
-        for frame in frames {
-            let Frame::Context { key, value } = frame else {
-                continue;
-            };
+        payload
+            .frames_of::<Context>()
+            .try_fold(true, |first, Context { key, value }| {
+                if first {
+                    write!(printer, "{prefix}{}", headers.context.style(styles.context))?;
+                }
 
-            if first {
-                write!(printer, "{prefix}{}", headers.context.style(styles.context))?;
-                first = false;
-            }
+                write!(
+                    printer,
+                    "{prefix}  {}",
+                    format_args!("{key}: {value}").style(styles.distracting)
+                )?;
 
-            write!(
-                printer,
-                "{prefix}  {}",
-                format_args!("{key}: {value}").style(styles.distracting)
-            )?;
-        }
+                Ok(false)
+            })?;
 
         // attachment pass
-        for frame in frames {
-            let Frame::Attachment(attachment) = frame else {
-                continue;
-            };
+        payload
+            .frames_of::<Attachment>()
+            .try_for_each(|Attachment { content }| {
+                write!(
+                    printer,
+                    "{prefix}{}",
+                    headers.attachment.style(styles.attachment)
+                )?;
 
-            write!(
-                printer,
-                "{prefix}{}",
-                headers.attachment.style(styles.attachment)
-            )?;
+                for line in content.lines() {
+                    write!(printer, "{prefix}  {}", line.style(styles.distracting))?;
+                }
 
-            for line in attachment.lines() {
-                write!(printer, "{prefix}  {}", line.style(styles.distracting))?;
-            }
-        }
+                Ok(())
+            })?;
 
         Ok(())
     }

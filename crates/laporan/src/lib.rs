@@ -2,6 +2,7 @@
 
 #![warn(missing_docs)]
 
+pub mod frame;
 #[cfg(feature = "tracing")]
 pub mod layer;
 pub mod prelude;
@@ -19,7 +20,10 @@ use std::{
 
 use educe::Educe;
 
-use crate::render::{GlobalRenderer, Renderer, SimpleRenderer};
+use crate::{
+    frame::{DynFrame, Frame},
+    render::{GlobalRenderer, Renderer, SimpleRenderer},
+};
 
 #[cfg(feature = "derive")]
 pub use laporan_derive::IntoReport;
@@ -29,60 +33,6 @@ pub type BoxDynError = Box<dyn Error + Send + Sync + 'static>;
 
 /// Helper alias for [`Result`](StdResult)
 pub type Result<T, E> = StdResult<T, Report<E>>;
-
-/// A single piece of information inside of a [`Report`].
-///
-/// `Frame`s can be created via the [`Self::suggestion`], [`Self::context`], or [`Self::attachment`] methods.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum Frame {
-    /// A collection of keys and values.
-    ///
-    /// This can be used to attach additional data such as:
-    /// ids, timestamps, commands, etc.
-    Context {
-        /// Name of the context field
-        key: String,
-        /// Value associated with the key
-        value: String,
-    },
-    /// A long-form piece of information.
-    ///
-    /// This can be used to attach more detailed data such as:
-    /// stderr, build logs, files, etc.
-    Attachment(String),
-    /// An inline suggestion
-    ///
-    /// This can be used to suggest actions to users to resolve issues.
-    Suggestion(String),
-}
-
-impl Frame {
-    /// Helper function to create [`Self::Context`]s.
-    #[inline]
-    pub fn context<K, V>(key: K, value: V) -> Self
-    where
-        K: Into<String>,
-        V: fmt::Display,
-    {
-        Self::Context {
-            key: key.into(),
-            value: value.to_string(),
-        }
-    }
-
-    /// Helper function to create [`Self::Suggestion`]s.
-    #[inline]
-    pub fn suggestion(suggestion: impl Into<String>) -> Self {
-        Self::Suggestion(suggestion.into())
-    }
-
-    /// Helper function to create [`Self::Attachment`]s.
-    #[inline]
-    pub fn attachment(attachment: impl fmt::Display) -> Self {
-        Self::Attachment(attachment.to_string())
-    }
-}
 
 /// Location data associated with a [`Report`].
 #[derive(Clone, Debug, Default)]
@@ -147,11 +97,11 @@ impl Metadata {
 }
 
 /// Inner payload of a [`Report`].
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ReportPayload {
     /// Frames attached to this report.
-    pub frames: Vec<Frame>,
+    frames: Vec<Box<dyn DynFrame>>,
     /// Child reports that caused this report.
     pub children: Vec<Self>,
     /// Main message attached to this report.
@@ -173,6 +123,12 @@ impl ReportPayload {
             frames: Vec::default(),
         }
     }
+
+    pub fn frames_of<T: 'static>(&self) -> impl Iterator<Item = &T> + DoubleEndedIterator {
+        self.frames
+            .iter()
+            .filter_map(|frame| (frame.as_ref() as &dyn std::any::Any).downcast_ref())
+    }
 }
 
 /// Type representing a [`Report`], but implementing [`Error`].
@@ -186,18 +142,22 @@ pub struct ReportError(ReportPayload);
 impl Error for ReportError {
     #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        // NOTE: we want to provide a source if there is *exactly* one child
-        (self.0.children.len() == 1).then(|| {
-            let payload = &self.0.children[0];
-            // SAFETY: `Self` is repr(transparent) over `ReportPayload`.
-            // SAFETY: The pointer we are dereferencing came from a valid reference.
-            let error = unsafe {
-                std::ptr::from_ref(payload)
-                    .cast::<Self>()
-                    .as_ref_unchecked()
-            };
-            error as &(dyn Error + 'static)
-        })
+        // NOTE: we want to provide a source if there is *exactly* one child.
+        //       in the case of children > 1, providing no information is better than providing misleading information.
+        if self.0.children.len() != 1 {
+            return None;
+        }
+
+        let payload = &self.0.children[0];
+        // SAFETY: `Self` is repr(transparent) over `ReportPayload`.
+        // SAFETY: The pointer we are dereferencing came from a valid reference.
+        let error = unsafe {
+            std::ptr::from_ref(payload)
+                .cast::<Self>()
+                .as_ref_unchecked()
+        };
+
+        Some(error as &(dyn Error + 'static))
     }
 }
 
@@ -218,26 +178,6 @@ pub struct Report<E> {
     #[educe(Deref, DerefMut)]
     inner: Box<ReportPayload>,
     _marker: PhantomData<fn() -> E>,
-}
-
-/// The [`fmt::Debug`] impl for this type defaults to rendering using the [`GlobalRenderer`].
-/// Additionally, the `{:#?}` directive can show the `Report` in a typical [`fmt::Debug`] fashion.
-impl<E> fmt::Debug for Report<E> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if f.alternate() {
-            self.inner.fmt(f)
-        } else {
-            GlobalRenderer.render(self).fmt(f)
-        }
-    }
-}
-
-impl<E> fmt::Display for Report<E> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        SimpleRenderer.render(self).fmt(f)
-    }
 }
 
 impl Report<()> {
@@ -315,14 +255,14 @@ impl<E> Report<E> {
     /// Appends a [`Frame`] to this `Report`.
     #[inline]
     #[must_use]
-    pub fn with_frame(mut self, frame: Frame) -> Self {
-        self.inner.frames.push(frame);
+    pub fn with_frame(mut self, frame: impl Frame) -> Self {
+        self.inner.frames.push(Box::new(frame));
         self
     }
 
     /// Appends an iterator of [`Frame`]s to this `Report`.
     #[must_use]
-    pub fn with_frames(self, frames: impl IntoIterator<Item = Frame>) -> Self {
+    pub fn with_frames(self, frames: impl IntoIterator<Item = impl Frame>) -> Self {
         frames.into_iter().fold(self, Self::with_frame)
     }
 
@@ -355,6 +295,26 @@ impl<E> Report<E> {
             inner: self.inner,
             _marker: PhantomData,
         }
+    }
+}
+
+/// The [`fmt::Debug`] impl for this type defaults to rendering using the [`GlobalRenderer`].
+/// Additionally, the `{:#?}` directive can show the `Report` in a typical [`fmt::Debug`] fashion.
+impl<E> fmt::Debug for Report<E> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if f.alternate() {
+            self.inner.fmt(f)
+        } else {
+            GlobalRenderer.render(self).fmt(f)
+        }
+    }
+}
+
+impl<E> fmt::Display for Report<E> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        SimpleRenderer.render(self).fmt(f)
     }
 }
 
@@ -431,7 +391,7 @@ pub trait ResultReportExt<T, E>: Sized {
     ///
     /// See [`Report::with_frame`] for more information.
     #[track_caller]
-    fn with_frame(self, frame: impl FnOnce() -> Frame) -> Result<T, E>;
+    fn with_frame<F: Frame>(self, frame: impl FnOnce() -> F) -> Result<T, E>;
 }
 
 // we can't use [`Result::map_err`] in any of these since `#[track_caller]` on closures is unstable
@@ -469,7 +429,7 @@ impl<T, E, D: Into<Report<E>>> ResultReportExt<T, E> for StdResult<T, D> {
     }
 
     #[inline]
-    fn with_frame(self, frame: impl FnOnce() -> Frame) -> Result<T, E> {
+    fn with_frame<F: Frame>(self, frame: impl FnOnce() -> F) -> Result<T, E> {
         match self {
             Ok(t) => Ok(t),
             Err(report) => Err(report.into().with_frame(frame())),
