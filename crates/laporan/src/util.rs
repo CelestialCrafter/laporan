@@ -1,0 +1,57 @@
+use std::{iter::once, result::Result as StdResult};
+
+/// Defines a Compat trait for populating common error types.
+#[macro_export]
+macro_rules! impl_compat {
+    ($name:ident, $(($error:path, |$argument:ident| $block:expr)),* $(,)?) => {
+        /// Helper trait for populating common error types.
+        pub trait $name<T, E>: Sized {
+            /// Converts this error into a pre-populated [`Report`]($crate::Report).
+            #[must_use]
+            fn compat(self) -> ::std::result::Result<T, $crate::Report<E>>;
+        }
+
+        $(impl<T> $name<T, $error> for ::std::result::Result<T, $error> {
+            #[track_caller]
+            #[inline]
+            fn compat(self) -> ::std::result::Result<T, $crate::Report<$error>> {
+                #[allow(unused_variables)]
+                #[track_caller]
+                fn convert($argument: $error) -> $crate::Report<$error> {
+                    $block
+                }
+
+                // we can't use [`Result::map_err`] since `#[track_caller]` doesn't work with it
+                match self {
+                    Ok(t) => Ok(t),
+                    Err(e) => Err(convert(e))
+                }
+            }
+        })*
+    };
+}
+
+/// Helper function to partition an [`Iterator`] based on its [`Result`].
+pub fn partition_results<T, U, E, F>(
+    iterator: impl Iterator<Item = StdResult<T, E>>,
+) -> StdResult<U, F>
+where
+    U: Extend<T> + Default,
+    F: Extend<E> + Default,
+{
+    let mut ok = U::default();
+    let mut error = F::default();
+
+    let has_error = iterator.fold(false, |has_error, result| match result {
+        Ok(value) => {
+            ok.extend(once(value));
+            has_error
+        }
+        Err(value) => {
+            error.extend(once(value));
+            true
+        }
+    });
+
+    if has_error { Err(error) } else { Ok(ok) }
+}

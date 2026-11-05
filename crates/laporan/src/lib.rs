@@ -2,17 +2,19 @@
 
 #![warn(missing_docs)]
 
+pub mod error;
+pub mod ext;
 pub mod frame;
 #[cfg(feature = "tracing")]
 pub mod layer;
 pub mod prelude;
 pub mod render;
+pub mod util;
 
 use std::{
     any::type_name,
     error::Error,
     fmt::{self, Display},
-    iter::once,
     marker::PhantomData,
     panic::Location as StdLocation,
     result::Result as StdResult,
@@ -25,6 +27,7 @@ use crate::{
     render::{GlobalRenderer, Renderer, SimpleRenderer},
 };
 
+pub use ext::{ReportExt, ResultReportExt};
 #[cfg(feature = "derive")]
 pub use laporan_derive::IntoReport;
 
@@ -33,6 +36,8 @@ pub type BoxDynError = Box<dyn Error + Send + Sync + 'static>;
 
 /// Helper alias for [`Result`](StdResult)
 pub type Result<T, E> = StdResult<T, Report<E>>;
+pub type ErasedReport = Report<()>;
+pub type ErasedResult<T> = Result<T, ()>;
 
 /// Location data associated with a [`Report`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -99,22 +104,18 @@ impl Metadata {
     }
 }
 
-/// Inner payload of a [`Report`].
+/// Inner raw of a [`Report`].
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ReportPayload {
-    /// Frames attached to this report.
+pub struct RawReport {
     frames: Vec<Box<dyn DynFrame>>,
-    /// Child reports that caused this report.
-    pub children: Vec<Self>,
-    /// Main message attached to this report.
-    pub message: String,
-    /// Other metadata associated with the report, such as creation location.
-    pub metadata: Metadata,
+    children: Vec<Self>,
+    message: String,
+    metadata: Metadata,
 }
 
-impl ReportPayload {
-    /// Construct a new `ReportPayload`.
+impl RawReport {
+    /// Construct a new `RawReport`.
     #[track_caller]
     #[inline]
     #[must_use]
@@ -127,6 +128,18 @@ impl ReportPayload {
         }
     }
 
+    pub fn children(&self) -> &[Self] {
+        &self.children
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    pub fn metadata(&self) -> &Metadata {
+        &self.metadata
+    }
+
     pub fn frames_of<T: 'static>(&self) -> impl DoubleEndedIterator<Item = &T> {
         self.frames
             .iter()
@@ -134,72 +147,35 @@ impl ReportPayload {
     }
 }
 
-/// Type representing a [`Report`], but implementing [`Error`].
-///
-/// This error type does not carry over all the frills of a [`Report`] (such as pretty error trees).
-/// It is also impossible to losslessly convert this back to a [`Report`].
-#[derive(Debug)]
-#[repr(transparent)]
-pub struct ReportError(ReportPayload);
-
-impl Error for ReportError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        // NOTE: we want to provide a source if there is *exactly* one child.
-        //       in the case of children > 1, providing no information is better than providing misleading information.
-        if self.0.children.len() != 1 {
-            return None;
-        }
-
-        let payload = &self.0.children[0];
-        // SAFETY: `Self` is repr(transparent) over `ReportPayload`.
-        // SAFETY: The pointer we are dereferencing came from a valid reference.
-        let error = unsafe {
-            std::ptr::from_ref(payload)
-                .cast::<Self>()
-                .as_ref_unchecked()
-        };
-
-        Some(error as &(dyn Error + 'static))
-    }
-}
-
-impl fmt::Display for ReportError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        SimpleRenderer.render(&self.0).fmt(f)
-    }
-}
-
 /// The core error type, representing a tree of errors.
 ///
-/// Each report contains [`Frame`]s, child [`ReportPayload`]s,
+/// Each report contains [`Frame`]s, child [`RawReport`]s,
 /// and additional information about the error.
 #[derive(Educe)]
-#[educe(Deref, DerefMut, Clone(bound()))]
+#[educe(Deref, Clone(bound()))]
 pub struct Report<E> {
-    #[educe(Deref, DerefMut)]
-    inner: Box<ReportPayload>,
+    #[educe(Deref)]
+    inner: Box<RawReport>,
     _marker: PhantomData<fn() -> E>,
 }
 
-impl Report<()> {
-    /// Constructs a new [`Report`] from a message.
+impl ErasedReport {
+    /// Constructs a new [`ErasedReport`] from a message.
     #[track_caller]
     #[inline]
     pub fn new(message: impl Into<String>) -> Self {
-        Self::from_payload(ReportPayload::new(message.into()))
+        Self::from_raw(RawReport::new(message.into()))
     }
 
-    /// Constructs a new [`Report`] from an error.
+    /// Constructs a new [`ErasedReport`] from an error.
     ///
     /// Note that this walks [`Error::source`] to build a tree of children.
-    /// To avoid this behavior, consider using [`Report::new`]
+    /// To avoid this behavior, consider using [`ErasedReport::new`]
     #[track_caller]
     #[inline]
     pub fn from_error<E: Error>(error: E) -> Self {
         #[track_caller]
-        fn walk(error: &dyn Error) -> Report<()> {
+        fn walk(error: &dyn Error) -> ErasedReport {
             let report = Report::new(error.to_string());
             match error.source() {
                 Some(source) => report.with_child(walk(source)),
@@ -208,41 +184,34 @@ impl Report<()> {
         }
 
         let mut report = walk(&error);
-        report.metadata.type_name = type_name::<E>();
+        report.inner.metadata.type_name = type_name::<E>();
         report
     }
 }
 
 impl<E> Report<E> {
-    /// Converts the underlying [`ReportPayload`] back into a `Report`.
+    /// Converts the underlying [`RawReport`] back into a `Report`.
     #[inline]
     #[must_use]
-    pub fn from_payload(payload: ReportPayload) -> Self {
+    pub fn from_raw(raw: RawReport) -> Self {
         Self {
-            inner: payload.into(),
+            inner: raw.into(),
             _marker: PhantomData,
         }
     }
 
-    /// Converts the `Report` into the underlying [`ReportPayload`].
+    /// Converts the `Report` into the underlying [`RawReport`].
     #[inline]
     #[must_use]
-    pub fn into_payload(self) -> ReportPayload {
+    pub fn into_raw(self) -> RawReport {
         *self.inner
     }
 
-    /// Converts this `Report` into a [`ReportError`]
-    #[inline]
-    #[must_use]
-    pub fn into_error(self) -> ReportError {
-        ReportError(*self.inner)
-    }
-
-    /// "Erases" this `Report`s generic parameter to [`()`].
+    /// Converts this `Report` into an [`ErasedReport`].
     // NOTE: This should not change self.inner.metadata.type_name like `Self::cast` does.
     #[inline]
     #[must_use]
-    pub fn erased(self) -> Report<()> {
+    pub fn erased(self) -> ErasedReport {
         Report {
             inner: self.inner,
             _marker: PhantomData,
@@ -327,125 +296,6 @@ impl<E> fmt::Display for Report<E> {
     }
 }
 
-/// Helper trait for [`Report<T>`].
-pub trait ReportExt<T> {
-    /// "Wraps" this `Report` with the parent's default `Report`.
-    ///
-    /// See [`Report::wrap`] for more information.
-    #[track_caller]
-    fn wrap<U: IntoReport + Default>(self) -> Report<U>;
-
-    /// "Wraps" this `Report` with a parent `Report`.
-    ///
-    /// See [`Report::wrap_with`] for more information.
-    #[track_caller]
-    fn wrap_with<U>(self, parent: impl Into<Report<U>>) -> Report<U>;
-}
-
-impl<T, U: Into<Report<T>>> ReportExt<T> for U {
-    #[inline]
-    fn wrap<V: IntoReport + Default>(self) -> Report<V> {
-        V::default().into_report().with_child(self.into())
-    }
-
-    #[inline]
-    fn wrap_with<V>(self, parent: impl Into<Report<V>>) -> Report<V> {
-        parent.into().with_child(self.into())
-    }
-}
-
-/// Helper trait for [`Result<T, Report<E>>`].
-pub trait ResultReportExt<T, E>: Sized {
-    /// Converts this [`Report`] into a type implementing [`Error`].
-    ///
-    /// See [`Report::into_error`] for more information.
-    #[track_caller]
-    fn into_error(self) -> StdResult<T, impl Error + Send + Sync + 'static>;
-
-    /// "Erases" this `Report`s generic parameter to `()`.
-    ///
-    /// See [`Report::erased`] for more information.
-    #[track_caller]
-    fn erased(self) -> Result<T, ()>;
-
-    /// "Wraps" this [`Report`] with the parent's default [`Report`].
-    ///
-    /// See [`Report::wrap`] for more information.
-    #[track_caller]
-    fn wrap<F: IntoReport + Default>(self) -> Result<T, F> {
-        self.wrap_with_fn(|| F::default())
-    }
-
-    /// Append a [`Report`] as a parent of this [`Report`].
-    ///
-    /// See [`Report::wrap_with`] for more information.
-    #[track_caller]
-    fn wrap_with<F, G: Into<Report<F>>>(self, parent: G) -> Result<T, F> {
-        self.wrap_with_fn(|| parent)
-    }
-
-    /// Append a [`Report`] as a parent of this [`Report`].
-    ///
-    /// See [`Report::wrap_with`] for more information.
-    #[track_caller]
-    fn wrap_with_fn<F, G: Into<Report<F>>>(self, func: impl FnOnce() -> G) -> Result<T, F>;
-
-    /// Sets the level associated with this [`Report`].
-    ///
-    /// See [`Report::with_level`] for more information.
-    #[track_caller]
-    fn with_level(self, level: Level) -> Result<T, E>;
-
-    /// Appends a [`Frame`] to this [`Report`].
-    ///
-    /// See [`Report::with_frame`] for more information.
-    #[track_caller]
-    fn with_frame<F: Frame>(self, frame: impl FnOnce() -> F) -> Result<T, E>;
-}
-
-// we can't use [`Result::map_err`] in any of these since `#[track_caller]` on closures is unstable
-impl<T, E, D: Into<Report<E>>> ResultReportExt<T, E> for StdResult<T, D> {
-    #[inline]
-    fn into_error(self) -> StdResult<T, impl Error + Send + Sync + 'static> {
-        match self {
-            Ok(t) => Ok(t),
-            Err(report) => Err(report.into().into_error()),
-        }
-    }
-
-    #[inline]
-    fn erased(self) -> Result<T, ()> {
-        match self {
-            Ok(t) => Ok(t),
-            Err(report) => Err(report.into().erased()),
-        }
-    }
-
-    #[inline]
-    fn wrap_with_fn<F, G: Into<Report<F>>>(self, parent: impl FnOnce() -> G) -> Result<T, F> {
-        match self {
-            Ok(t) => Ok(t),
-            Err(report) => Err(parent().into().with_child(report.into())),
-        }
-    }
-
-    #[inline]
-    fn with_level(self, level: Level) -> Result<T, E> {
-        match self {
-            Ok(t) => Ok(t),
-            Err(report) => Err(report.into().with_level(level)),
-        }
-    }
-
-    #[inline]
-    fn with_frame<F: Frame>(self, frame: impl FnOnce() -> F) -> Result<T, E> {
-        match self {
-            Ok(t) => Ok(t),
-            Err(report) => Err(report.into().with_frame(frame())),
-        }
-    }
-}
-
 /// Trait for converting [`Error`]s into enriched [`Report`]s
 ///
 /// This can be implemented via `#[derive(IntoReport)]`.
@@ -475,58 +325,4 @@ impl<T: IntoReport> From<T> for Report<T> {
     fn from(value: T) -> Self {
         value.into_report()
     }
-}
-
-/// Defines a Compat trait for populating common error types.
-#[macro_export]
-macro_rules! impl_compat {
-    ($name:ident, $(($error:path, |$argument:ident| $block:expr)),* $(,)?) => {
-        /// Helper trait for populating common error types.
-        pub trait $name<T, E>: Sized {
-            /// Converts this error into a pre-populated [`Report`]($crate::Report).
-            #[must_use]
-            fn compat(self) -> ::std::result::Result<T, $crate::Report<E>>;
-        }
-
-        $(impl<T> $name<T, $error> for ::std::result::Result<T, $error> {
-            #[track_caller]
-            #[inline]
-            fn compat(self) -> ::std::result::Result<T, $crate::Report<$error>> {
-                #[allow(unused_variables)]
-                #[track_caller]
-                fn convert($argument: $error) -> $crate::Report<$error> {
-                    $block
-                }
-
-                // we can't use [`Result::map_err`] since `#[track_caller]` doesn't work with it
-                match self {
-                    Ok(t) => Ok(t),
-                    Err(e) => Err(convert(e))
-                }
-            }
-        })*
-    };
-}
-
-/// Helper function to partition an [`Iterator`] based on its [`Result`]
-pub fn partition_results<T, U, E, F>(
-    iterator: impl Iterator<Item = StdResult<T, E>>,
-) -> StdResult<U, F>
-where
-    U: Extend<T> + Default,
-    F: Extend<E> + Default,
-{
-    let mut ok = U::default();
-    let mut err = F::default();
-
-    let mut has_error = false;
-    iterator.for_each(|result| match result {
-        Ok(v) => ok.extend(once(v)),
-        Err(v) => {
-            has_error = true;
-            err.extend(once(v));
-        }
-    });
-
-    if has_error { Err(err) } else { Ok(ok) }
 }

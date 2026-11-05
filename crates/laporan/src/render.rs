@@ -16,10 +16,10 @@ pub use json::JsonRenderer;
 pub use pretty::PrettyRenderer;
 pub use simple::SimpleRenderer;
 
-use crate::ReportPayload;
+use crate::RawReport;
 
 /// Trait for rendering [`Report`]s.
 pub trait Renderer {
     /// Renders a [`Report`] into an impl [`fmt::Display`]
-    fn render<'a>(&'a self, payload: &'a ReportPayload) -> impl fmt::Display + 'a;
+    fn render<'a>(&'a self, raw: &'a RawReport) -> impl fmt::Display + 'a;
 }

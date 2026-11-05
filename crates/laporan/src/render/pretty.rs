@@ -6,7 +6,7 @@ use educe::Educe;
 use owo_colors::Style;
 
 use crate::{
-    Level, Location, Metadata, ReportPayload,
+    Level, Location, Metadata, RawReport,
     frame::{Attachment, Context, Suggestion},
     render::Renderer,
 };
@@ -245,11 +245,8 @@ impl<T: fmt::Display> fmt::Display for MaybeStyled<T> {
 
 impl Renderer for PrettyRenderer {
     #[inline]
-    fn render<'a>(&'a self, payload: &'a ReportPayload) -> impl fmt::Display + 'a {
-        PrettyDisplayer {
-            inner: self,
-            payload,
-        }
+    fn render<'a>(&'a self, raw: &'a RawReport) -> impl fmt::Display + 'a {
+        PrettyDisplayer { inner: self, raw }
     }
 }
 
@@ -273,7 +270,7 @@ impl LinePrinter<'_, '_> {
 #[derive(Debug, Copy, Clone)]
 struct PrettyDisplayer<'a> {
     inner: &'a PrettyRenderer,
-    payload: &'a ReportPayload,
+    raw: &'a RawReport,
 }
 
 impl fmt::Display for PrettyDisplayer<'_> {
@@ -284,12 +281,7 @@ impl fmt::Display for PrettyDisplayer<'_> {
             first: true,
         };
 
-        self.render_report(
-            &mut printer,
-            self.payload,
-            format_args!(""),
-            format_args!(""),
-        )
+        self.render_report(&mut printer, self.raw, format_args!(""), format_args!(""))
     }
 }
 
@@ -333,7 +325,7 @@ impl PrettyDisplayer<'_> {
     fn render_report(
         &self,
         printer: &mut LinePrinter<'_, '_>,
-        payload: &ReportPayload,
+        raw: &RawReport,
         prefix: fmt::Arguments<'_>,
         next_prefix: fmt::Arguments<'_>,
     ) -> fmt::Result {
@@ -341,7 +333,7 @@ impl PrettyDisplayer<'_> {
         let guides = &self.inner.config.guides;
         let styles = &self.inner.config.styles;
 
-        let log_header = match payload.metadata.level {
+        let log_header = match raw.metadata.level {
             Level::Error => self.render_value(log_headers.error, styles.log.error),
             Level::Warn => self.render_value(log_headers.warn, styles.log.warn),
             Level::Info => self.render_value(log_headers.info, styles.log.info),
@@ -349,7 +341,7 @@ impl PrettyDisplayer<'_> {
             Level::Trace => self.render_value(log_headers.trace, styles.log.trace),
         };
 
-        let message = self.with_fallback(&payload.message, "no message");
+        let message = self.with_fallback(&raw.message, "no message");
         self.write_block(
             printer,
             prefix,
@@ -358,16 +350,16 @@ impl PrettyDisplayer<'_> {
             Style::new().bold(),
         )?;
 
-        let guide = if payload.children.is_empty() {
+        let guide = if raw.children.is_empty() {
             guides.empty
         } else {
             guides.line
         };
 
         let sub_prefix = format_args!("{}{}", next_prefix, self.render_value(guide, styles.guides));
-        self.render_frames(printer, payload, sub_prefix)?;
-        self.render_extra(printer, &payload.metadata, sub_prefix)?;
-        self.render_children(printer, &payload.children, next_prefix)
+        self.render_frames(printer, raw, sub_prefix)?;
+        self.render_extra(printer, &raw.metadata, sub_prefix)?;
+        self.render_children(printer, &raw.children, next_prefix)
     }
 
     fn render_extra(
@@ -410,14 +402,14 @@ impl PrettyDisplayer<'_> {
     fn render_frames(
         &self,
         printer: &mut LinePrinter<'_, '_>,
-        payload: &ReportPayload,
+        raw: &RawReport,
         prefix: fmt::Arguments<'_>,
     ) -> fmt::Result {
         let headers = &self.inner.config.headers;
         let styles = &self.inner.config.styles;
 
         // suggestion pass
-        for Suggestion { content } in payload.frames_of::<Suggestion>() {
+        for Suggestion { content } in raw.frames_of::<Suggestion>() {
             self.write_block(
                 printer,
                 prefix,
@@ -431,8 +423,7 @@ impl PrettyDisplayer<'_> {
         }
 
         // context pass
-        payload
-            .frames_of::<Context>()
+        raw.frames_of::<Context>()
             .try_fold(true, |first, Context { key, value }| {
                 if first {
                     write!(
@@ -453,7 +444,7 @@ impl PrettyDisplayer<'_> {
             })?;
 
         // attachment pass
-        for Attachment { content } in payload.frames_of::<Attachment>() {
+        for Attachment { content } in raw.frames_of::<Attachment>() {
             write!(
                 printer,
                 "{prefix}{}",
@@ -475,7 +466,7 @@ impl PrettyDisplayer<'_> {
     fn render_children(
         &self,
         printer: &mut LinePrinter<'_, '_>,
-        children: &[ReportPayload],
+        children: &[RawReport],
         prefix: fmt::Arguments<'_>,
     ) -> fmt::Result {
         let guides = &self.inner.config.guides;

@@ -2,12 +2,12 @@
 
 use std::fmt;
 
-use crate::{ReportPayload, render::Renderer};
+use crate::{RawReport, render::Renderer};
 
 #[derive(Debug, Clone)]
 struct JsonDisplayer<'a> {
     inner: &'a JsonRenderer,
-    payload: &'a ReportPayload,
+    raw: &'a RawReport,
 }
 
 impl fmt::Display for JsonDisplayer<'_> {
@@ -19,7 +19,7 @@ impl fmt::Display for JsonDisplayer<'_> {
             serde_json::to_string
         };
 
-        let string = serialize(self.payload).map_err(|_| fmt::Error)?;
+        let string = serialize(self.raw).map_err(|_| fmt::Error)?;
         f.write_str(&string)
     }
 }
@@ -44,10 +44,7 @@ impl JsonRenderer {
 
 impl Renderer for JsonRenderer {
     #[inline]
-    fn render<'a>(&'a self, payload: &'a ReportPayload) -> impl fmt::Display + 'a {
-        JsonDisplayer {
-            inner: self,
-            payload,
-        }
+    fn render<'a>(&'a self, raw: &'a RawReport) -> impl fmt::Display + 'a {
+        JsonDisplayer { inner: self, raw }
     }
 }

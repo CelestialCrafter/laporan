@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{ReportPayload, render::Renderer};
+use crate::{RawReport, render::Renderer};
 
 /// Default renderer for [`Report`]s.
 ///
@@ -21,7 +21,7 @@ impl SimpleRenderer {
 
 impl Renderer for SimpleRenderer {
     #[inline]
-    fn render(&self, report: &ReportPayload) -> impl fmt::Display {
+    fn render(&self, report: &RawReport) -> impl fmt::Display {
         &report.message
     }
 }

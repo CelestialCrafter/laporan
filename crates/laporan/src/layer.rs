@@ -13,7 +13,8 @@ use tracing_subscriber::{
 };
 
 use crate::{
-    Level, Location, Metadata, Report, ReportError, ReportPayload,
+    Level, Location, Metadata, RawReport, Report,
+    error::ReportError,
     frame::{Attachment, Context, DynFrame, Suggestion},
     render::{GlobalRenderer, Renderer},
 };
@@ -22,7 +23,7 @@ use crate::{
 struct RecordVisitor {
     message: Option<String>,
     frames: Vec<Box<dyn DynFrame>>,
-    children: Vec<ReportPayload>,
+    children: Vec<RawReport>,
 }
 
 impl RecordVisitor {
@@ -52,13 +53,13 @@ impl field::Visit for RecordVisitor {
     fn record_error(&mut self, _: &field::Field, value: &(dyn Error + 'static)) {
         self.children
             .push(match value.downcast_ref::<ReportError>() {
-                Some(ReportError(payload)) => payload.clone(),
-                None => Report::from_error(value).into_payload(),
+                Some(error) => error.as_ref().clone(),
+                None => Report::from_error(value).into_raw(),
             });
     }
 }
 
-fn metadata_to_payload(metadata: &tracing::Metadata, visitor: RecordVisitor) -> ReportPayload {
+fn metadata_to_raw(metadata: &tracing::Metadata, visitor: RecordVisitor) -> RawReport {
     let type_name = if metadata.is_span() {
         type_name::<Span>()
     } else {
@@ -90,7 +91,7 @@ fn metadata_to_payload(metadata: &tracing::Metadata, visitor: RecordVisitor) -> 
         None => Location::Module(metadata.target().to_string()),
     };
 
-    ReportPayload {
+    RawReport {
         frames: visitor.frames,
         children: visitor.children,
         message,
@@ -159,9 +160,9 @@ where
         let mut visitor = RecordVisitor::default();
         attrs.record(&mut visitor);
 
-        let payload = metadata_to_payload(span.metadata(), visitor);
-        // NOTE: `insert` panics when a payload is already present, breaking the use of multiple `ReportLayer`s
-        let _ = span.extensions_mut().replace(payload);
+        let raw = metadata_to_raw(span.metadata(), visitor);
+        // NOTE: `insert` panics when a raw is already present, breaking the use of multiple `ReportLayer`s
+        let _ = span.extensions_mut().replace(raw);
     }
 
     fn on_record(&self, span: &span::Id, values: &span::Record<'_>, ctx: LayerContext<'_, S>) {
@@ -170,7 +171,7 @@ where
         };
 
         let mut extensions = span.extensions_mut();
-        let Some(payload) = extensions.get_mut::<ReportPayload>() else {
+        let Some(raw) = extensions.get_mut::<RawReport>() else {
             return;
         };
 
@@ -179,18 +180,18 @@ where
 
         for new in visitor.frames {
             // preparation for upserting context frames with new values
-            payload.frames.retain(|old| {
+            raw.frames.retain(|old| {
                 let new = (new.as_ref() as &dyn Any).downcast_ref::<Context>();
                 let old = (old.as_ref() as &dyn Any).downcast_ref::<Context>();
                 new.zip(old).is_none_or(|(new, old)| new.key != old.key)
             });
 
-            payload.frames.push(new);
+            raw.frames.push(new);
         }
 
-        payload.children.extend(visitor.children);
+        raw.children.extend(visitor.children);
         if let Some(message) = visitor.message {
-            payload.message = message;
+            raw.message = message;
         }
     }
 
@@ -200,15 +201,15 @@ where
         let mut visitor = RecordVisitor::default();
         event.record(&mut visitor);
 
-        let payload = metadata_to_payload(metadata, visitor);
-        let payload = ctx
+        let raw = metadata_to_raw(metadata, visitor);
+        let raw = ctx
             .event_scope(event)
             .and_then(|scope| {
                 let mut spans =
-                    scope.filter_map(|span| span.extensions().get::<ReportPayload>().cloned());
+                    scope.filter_map(|span| span.extensions().get::<RawReport>().cloned());
 
                 let mut root = spans.next()?;
-                root.children.push(payload.clone());
+                root.children.push(raw.clone());
 
                 for mut parent in spans {
                     parent.children.push(root);
@@ -217,9 +218,9 @@ where
 
                 Some(root)
             })
-            .unwrap_or(payload);
+            .unwrap_or(raw);
 
-        let display = self.renderer.render(&payload);
+        let display = self.renderer.render(&raw);
         let mut writer = self.writer.make_writer_for(metadata);
         // NOTE: we can't actually return errors, so this is just best-effort behavior
         let _ = writeln!(writer, "{display}");

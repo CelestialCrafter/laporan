@@ -6,25 +6,25 @@ use std::{
 };
 
 use crate::{
-    ReportPayload,
+    RawReport,
     render::{Renderer, SimpleRenderer},
 };
 
 static RENDERER: OnceLock<Box<dyn DynRender + Send + Sync>> = OnceLock::new();
 
 trait DynRender {
-    fn render(&self, payload: &ReportPayload, fmt: &mut fmt::Formatter) -> fmt::Result;
+    fn render(&self, raw: &RawReport, fmt: &mut fmt::Formatter) -> fmt::Result;
 }
 
 impl<T: Renderer> DynRender for T {
     #[inline]
-    fn render(&self, payload: &ReportPayload, f: &mut fmt::Formatter) -> fmt::Result {
-        Renderer::render(self, payload).fmt(f)
+    fn render(&self, raw: &RawReport, f: &mut fmt::Formatter) -> fmt::Result {
+        Renderer::render(self, raw).fmt(f)
     }
 }
 
 struct GlobalDisplayer<'a> {
-    payload: &'a ReportPayload,
+    raw: &'a RawReport,
 }
 
 impl fmt::Display for GlobalDisplayer<'_> {
@@ -35,7 +35,7 @@ impl fmt::Display for GlobalDisplayer<'_> {
             None => &SimpleRenderer,
         };
 
-        renderer.render(self.payload, f)
+        renderer.render(self.raw, f)
     }
 }
 
@@ -58,7 +58,7 @@ impl GlobalRenderer {
 
 impl Renderer for GlobalRenderer {
     #[inline]
-    fn render(&self, payload: &ReportPayload) -> impl fmt::Display {
-        GlobalDisplayer { payload }
+    fn render(&self, raw: &RawReport) -> impl fmt::Display {
+        GlobalDisplayer { raw }
     }
 }
