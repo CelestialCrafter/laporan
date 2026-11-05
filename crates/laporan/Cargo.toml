@@ -2,6 +2,10 @@
 name = "laporan"
 version = "0.1.0"
 edition = "2024"
+license = "MPL-2.0"
+description = "Error handling library, split off from Xuehua's xh-reports"
+homepage = "https://github.com/CelestialCrafter/laporan"
+repository = "https://github.com/CelestialCrafter/laporan"
 
 [features]
 default = ["derive"]
