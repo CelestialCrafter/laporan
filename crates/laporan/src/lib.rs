@@ -31,9 +31,11 @@ use alloc::{
 
 use educe::Educe;
 
+#[cfg(feature = "std")]
+use crate::render::GlobalRenderer;
 use crate::{
     frame::{DynFrame, Frame},
-    render::{GlobalRenderer, Renderer, SimpleRenderer},
+    render::{Renderer, SimpleRenderer},
 };
 
 pub use ext::{ReportExt, ResultReportExt};
@@ -176,14 +178,16 @@ impl ErasedReport {
     pub fn new(message: impl Into<String>) -> Self {
         Self::from_raw(RawReport::new(message.into()))
     }
+}
 
-    /// Constructs a new [`ErasedReport`] from an error.
+impl<E: Error> Report<E> {
+    /// Constructs a new `Report` from an error.
     ///
     /// Note that this walks [`Error::source`] to build a tree of children.
     /// To avoid this behavior, consider using [`ErasedReport::new`]
     #[track_caller]
     #[inline]
-    pub fn from_error<E: Error>(error: E) -> Self {
+    pub fn from_error(error: E) -> Self {
         #[track_caller]
         fn walk(error: &dyn Error) -> ErasedReport {
             let report = Report::new(error.to_string());
@@ -193,9 +197,7 @@ impl ErasedReport {
             }
         }
 
-        let mut report = walk(&error);
-        report.inner.metadata.type_name = type_name::<E>();
-        report
+        walk(&error).cast()
     }
 }
 
@@ -294,7 +296,11 @@ impl<E> fmt::Debug for Report<E> {
         if f.alternate() {
             self.inner.fmt(f)
         } else {
-            GlobalRenderer.render(self).fmt(f)
+            if cfg!(feature = "std") {
+                GlobalRenderer.render(self).fmt(f)
+            } else {
+                SimpleRenderer.render(self).fmt(f)
+            }
         }
     }
 }
@@ -320,13 +326,6 @@ pub trait IntoReport: Sized + Send + Sync + 'static {
     /// (by adding frames, children, etc) as they see fit.
     #[track_caller]
     fn into_report(self) -> Report<Self>;
-}
-
-impl<E: Error + Send + Sync + 'static> IntoReport for E {
-    #[inline]
-    fn into_report(self) -> Report<Self> {
-        Report::from_error(self).cast()
-    }
 }
 
 impl<T: IntoReport> From<T> for Report<T> {
