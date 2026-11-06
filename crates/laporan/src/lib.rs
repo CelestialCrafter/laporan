@@ -35,7 +35,7 @@ pub type BoxDynError = Box<dyn Error + Send + Sync + 'static>;
 pub type Result<T, E> = StdResult<T, Report<E>>;
 
 /// Location data associated with a [`Report`].
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Location {
     /// A location pointing to a file
@@ -55,7 +55,7 @@ pub enum Location {
 }
 
 /// Severity level associated with a [`Report`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[allow(missing_docs)]
 pub enum Level {
@@ -63,11 +63,13 @@ pub enum Level {
     Debug,
     Warn,
     Info,
+    #[default]
     Error,
 }
 
 /// Metadata associated with a [`Report`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Educe)]
+#[educe(Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Metadata {
     /// The location in which the [`Report`] originated.
@@ -77,20 +79,21 @@ pub struct Metadata {
     /// The name of the type associated with the [`Report`]
     ///
     /// Note: This field has the same semantics as [`type_name`]
-    pub type_name: String,
+    #[educe(Default(expr = std::any::type_name::<()>()))]
+    pub type_name: &'static str,
 }
 
 impl Metadata {
     #[track_caller]
     fn new() -> Self {
-        let std_location = StdLocation::caller();
+        let location = StdLocation::caller();
         Self {
             location: Location::File {
-                name: std_location.file().into(),
-                line: Some(std_location.line()),
-                column: Some(std_location.column()),
+                name: location.file().to_string(),
+                line: Some(location.line()),
+                column: Some(location.column()),
             },
-            type_name: type_name::<()>().to_string(),
+            type_name: type_name::<()>(),
             level: Level::Error,
         }
     }
@@ -115,16 +118,16 @@ impl ReportPayload {
     #[track_caller]
     #[inline]
     #[must_use]
-    pub fn new(message: String) -> Self {
+    pub fn new(message: impl Into<String>) -> Self {
         Self {
-            message,
+            message: message.into(),
             metadata: Metadata::new(),
             children: Vec::default(),
             frames: Vec::default(),
         }
     }
 
-    pub fn frames_of<T: 'static>(&self) -> impl Iterator<Item = &T> + DoubleEndedIterator {
+    pub fn frames_of<T: 'static>(&self) -> impl DoubleEndedIterator<Item = &T> {
         self.frames
             .iter()
             .filter_map(|frame| (frame.as_ref() as &dyn std::any::Any).downcast_ref())
@@ -172,8 +175,8 @@ impl fmt::Display for ReportError {
 ///
 /// Each report contains [`Frame`]s, child [`ReportPayload`]s,
 /// and additional information about the error.
-#[derive(Educe, Clone)]
-#[educe(Deref, DerefMut)]
+#[derive(Educe)]
+#[educe(Deref, DerefMut, Clone(bound()))]
 pub struct Report<E> {
     #[educe(Deref, DerefMut)]
     inner: Box<ReportPayload>,
@@ -188,6 +191,29 @@ impl Report<()> {
         Self::from_payload(ReportPayload::new(message.into()))
     }
 
+    /// Constructs a new [`Report`] from an error.
+    ///
+    /// Note that this walks [`Error::source`] to build a tree of children.
+    /// To avoid this behavior, consider using [`Report::new`]
+    #[track_caller]
+    #[inline]
+    pub fn from_error<E: Error>(error: E) -> Self {
+        #[track_caller]
+        fn walk(error: &dyn Error) -> Report<()> {
+            let report = Report::new(error.to_string());
+            match error.source() {
+                Some(source) => report.with_child(walk(source)),
+                None => report,
+            }
+        }
+
+        let mut report = walk(&error);
+        report.metadata.type_name = type_name::<E>();
+        report
+    }
+}
+
+impl<E> Report<E> {
     /// Converts the underlying [`ReportPayload`] back into a `Report`.
     #[inline]
     #[must_use]
@@ -198,27 +224,6 @@ impl Report<()> {
         }
     }
 
-    /// Constructs a new [`Report`] from an error.
-    ///
-    /// Note that this walks [`Error::source`] to build a tree of children.
-    /// To avoid this behavior, consider using [`Report::new`]
-    #[track_caller]
-    #[inline]
-    pub fn from_error(error: impl Error) -> Self {
-        #[track_caller]
-        fn walk(error: &dyn Error) -> Report<()> {
-            let report = Report::new(error.to_string());
-            match error.source() {
-                Some(source) => report.with_child(walk(source)),
-                None => report,
-            }
-        }
-
-        walk(&error)
-    }
-}
-
-impl<E> Report<E> {
     /// Converts the `Report` into the underlying [`ReportPayload`].
     #[inline]
     #[must_use]
@@ -262,8 +267,10 @@ impl<E> Report<E> {
 
     /// Appends an iterator of [`Frame`]s to this `Report`.
     #[must_use]
-    pub fn with_frames(self, frames: impl IntoIterator<Item = impl Frame>) -> Self {
-        frames.into_iter().fold(self, Self::with_frame)
+    pub fn with_frames(mut self, frames: impl IntoIterator<Item = impl Frame>) -> Self {
+        let iter = frames.into_iter().map(|frame| Box::new(frame) as Box<_>);
+        self.inner.frames.extend(iter);
+        self
     }
 
     /// Appends a `Report` as a child to this `Report`.
@@ -277,8 +284,10 @@ impl<E> Report<E> {
     /// Appends an iterator of `Report`s as children of this `Report`.
     #[inline]
     #[must_use]
-    pub fn with_children<F>(self, children: impl IntoIterator<Item = Report<F>>) -> Self {
-        children.into_iter().fold(self, Self::with_child)
+    pub fn with_children<F>(mut self, children: impl IntoIterator<Item = Report<F>>) -> Self {
+        let iter = children.into_iter().map(|child| *child.inner);
+        self.inner.children.extend(iter);
+        self
     }
 
     /// "Casts" the reports generic parameter to `F`.
@@ -289,7 +298,7 @@ impl<E> Report<E> {
     #[inline]
     #[must_use]
     pub fn cast<F>(mut self) -> Report<F> {
-        self.inner.metadata.type_name = type_name::<F>().to_string();
+        self.inner.metadata.type_name = type_name::<F>();
 
         Report {
             inner: self.inner,
@@ -471,10 +480,11 @@ impl<T: IntoReport> From<T> for Report<T> {
 /// Defines a Compat trait for populating common error types.
 #[macro_export]
 macro_rules! impl_compat {
-    ($name:ident, $(($error:path, |$argument:ident| $block:expr)),*) => {
+    ($name:ident, $(($error:path, |$argument:ident| $block:expr)),* $(,)?) => {
         /// Helper trait for populating common error types.
         pub trait $name<T, E>: Sized {
             /// Converts this error into a pre-populated [`Report`]($crate::Report).
+            #[must_use]
             fn compat(self) -> ::std::result::Result<T, $crate::Report<E>>;
         }
 
@@ -482,6 +492,7 @@ macro_rules! impl_compat {
             #[track_caller]
             #[inline]
             fn compat(self) -> ::std::result::Result<T, $crate::Report<$error>> {
+                #[allow(unused_variables)]
                 #[track_caller]
                 fn convert($argument: $error) -> $crate::Report<$error> {
                     $block

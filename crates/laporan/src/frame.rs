@@ -1,8 +1,8 @@
 use std::{any::Any, fmt};
 
-/// A single key-value pair.
+/// A single arbitrary key-value pair.
 ///
-/// This can be used to attach additional data to a [`Report`] such as:
+/// This can be used to attach additional consumer exposed data to a [`Report`] such as:
 /// ids, timestamps, commands, etc.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -82,13 +82,32 @@ pub trait Frame: serde::Serialize + Clone + fmt::Debug + Send + Sync + 'static {
 pub(crate) trait DynFrame: fmt::Debug + Send + Sync + Any {
     #[cfg(feature = "serde")]
     fn serialize_inner(&self) -> &dyn erased_serde::Serialize;
+
+    // `type_name` is feature-gated with `serde` since we really only need it for serialization metadata
+    #[cfg(feature = "serde")]
+    fn type_name(&self) -> &'static str;
+
     fn clone_inner(&self) -> Box<dyn DynFrame>;
 }
 
 #[cfg(feature = "serde")]
 impl serde::Serialize for Box<dyn DynFrame> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        erased_serde::serialize(self.as_ref().serialize_inner(), serializer)
+        use serde::ser::SerializeStruct;
+
+        struct SerializedFrame<'a>(&'a dyn erased_serde::Serialize);
+
+        impl serde::Serialize for SerializedFrame<'_> {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                erased_serde::serialize(self.0, serializer)
+            }
+        }
+
+        let frame = self.as_ref();
+        let mut state = serializer.serialize_struct("Frame", 2)?;
+        state.serialize_field("type_name", frame.type_name())?;
+        state.serialize_field("data", &SerializedFrame(frame.serialize_inner()))?;
+        state.end()
     }
 }
 
@@ -102,6 +121,11 @@ impl<T: Frame> DynFrame for T {
     #[cfg(feature = "serde")]
     fn serialize_inner(&self) -> &dyn erased_serde::Serialize {
         self
+    }
+
+    #[cfg(feature = "serde")]
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<T>()
     }
 
     fn clone_inner(&self) -> Box<dyn DynFrame> {

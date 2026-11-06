@@ -19,7 +19,7 @@ impl fmt::Display for JsonDisplayer<'_> {
             serde_json::to_string
         };
 
-        let string = serialize(self.payload).expect("report serialization should succeed");
+        let string = serialize(self.payload).map_err(|_| fmt::Error)?;
         f.write_str(&string)
     }
 }
