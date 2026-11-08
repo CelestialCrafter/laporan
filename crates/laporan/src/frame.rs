@@ -81,6 +81,37 @@ pub trait Frame: Clone + fmt::Debug + Send + Sync + 'static {}
 #[cfg(feature = "serde")]
 pub trait Frame: serde::Serialize + Clone + fmt::Debug + Send + Sync + 'static {}
 
+/// Wraps a frame to where it serializes as `()`.
+#[derive(Educe, Debug, Clone)]
+#[educe(Deref)]
+pub struct Opaque<T>(T);
+
+impl<T> Opaque<T> {
+    /// Constructs a new `Opaque`.
+    #[inline]
+    #[must_use]
+    pub fn new(value: T) -> Self {
+        Self(value)
+    }
+
+    /// Converts this `Opaque` into it's inner value.
+    #[inline]
+    #[must_use]
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<T> serde::Serialize for Opaque<T> {
+    #[inline]
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_unit()
+    }
+}
+
+impl<T: Clone + fmt::Debug + Send + Sync + 'static> Frame for Opaque<T> {}
+
 pub(crate) trait DynFrame: fmt::Debug + Send + Sync + Any {
     #[cfg(feature = "serde")]
     fn serialize_inner(&self) -> &dyn erased_serde::Serialize;
