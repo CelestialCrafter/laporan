@@ -1,12 +1,12 @@
-//! Default rendering for [`Report`]s.
+//! Default rendering for [`crate::Report`]s.
 
 use core::fmt;
 
 use crate::{RawReport, render::Renderer};
 
-/// Default renderer for [`Report`]s.
+/// Default renderer for [`crate::Report`]s.
 ///
-/// [`Report`]s can be rendered via the [`Report`] trait.
+/// [`crate::Report`]s can be rendered via the [`Renderer`] trait.
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SimpleRenderer;
 

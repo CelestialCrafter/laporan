@@ -104,6 +104,8 @@ fn metadata_to_raw(metadata: &tracing::Metadata, visitor: RecordVisitor) -> RawR
 }
 
 /// A [`Layer`] that prints [`Event`]s to a report [`Renderer`].
+///
+/// Note: Errors produced from the writer are ignored, since there is no error reporting mechanism within a [`Layer`].
 pub struct ReportLayer<R, W> {
     renderer: R,
     writer: W,

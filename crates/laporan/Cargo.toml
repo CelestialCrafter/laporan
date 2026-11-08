@@ -17,6 +17,10 @@ serde = ["dep:serde", "dep:erased-serde"]
 json = ["dep:serde_json", "serde"]
 tracing = ["dep:tracing", "dep:tracing-subscriber", "std"]
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 laporan-derive = { version = "0.1.0", path = "../laporan-derive", optional = true }
 educe = "0.8.1"

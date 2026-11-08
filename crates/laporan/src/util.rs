@@ -1,3 +1,5 @@
+//! Utility functions and macros.
+
 use core::{iter::once, result::Result as StdResult};
 
 /// Defines a Compat trait for populating common error types.
@@ -41,7 +43,7 @@ macro_rules! impl_compat {
     (@define $name:ident) => {
         /// Helper trait for populating common error types.
         pub trait $name<T, E>: Sized {
-            /// Converts this error into a pre-populated [`Report`]($crate::Report).
+            /// Converts this error into a pre-populated [`crate::Report`].
             #[must_use]
             fn compat(self) -> ::core::result::Result<T, $crate::Report<E>>;
         }
@@ -49,6 +51,8 @@ macro_rules! impl_compat {
 }
 
 /// Helper function to partition an [`Iterator`] based on its [`Result`].
+///
+/// If value is of the [`Result::Err`], all errors are returned and the collected [`Result::Ok`] values are discarded.
 pub fn partition_results<T, U, E, F>(
     iterator: impl Iterator<Item = StdResult<T, E>>,
 ) -> StdResult<U, F>

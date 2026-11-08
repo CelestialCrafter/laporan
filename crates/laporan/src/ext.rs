@@ -1,18 +1,18 @@
-use core::{error::Error, result::Result as StdResult};
+//! Extension traits for [`Report`]s and [`Result`]ss.
 
-use crate::{ErasedResult, IntoReport, Level, Location, Report, Result, error, frame::Frame};
+use core::result::Result as StdResult;
+
+use crate::{ErasedResult, IntoReport, Level, Location, Report, Result, frame::Frame};
 
 /// Helper trait for [`Report<T>`].
 pub trait ReportExt<T> {
     /// "Wraps" this `Report` with the parent's default `Report`.
-    ///
-    /// See [`Report::wrap`] for more information.
     #[track_caller]
     fn wrap<U: IntoReport + Default>(self) -> Report<U>;
 
     /// "Wraps" this `Report` with a parent `Report`.
     ///
-    /// See [`Report::wrap_with`] for more information.
+    /// See [`ReportExt::wrap`] for more information.
     #[track_caller]
     fn wrap_with<U>(self, parent: impl Into<Report<U>>) -> Report<U>;
 }
@@ -31,13 +31,7 @@ impl<T, U: Into<Report<T>>> ReportExt<T> for U {
 
 /// Helper trait for [`Result<T, Report<E>>`].
 pub trait ResultReportExt<T, E>: Sized {
-    /// Converts this [`Report`] into a type implementing [`Error`].
-    ///
-    /// See [`Report::into_error`] for more information.
-    #[track_caller]
-    fn into_error(self) -> StdResult<T, impl Error + Send + Sync + 'static>;
-
-    /// Converts this `Report` into an [`ErasedReport`].
+    /// Converts this `Report` into an [`crate::ErasedReport`].
     ///
     /// See [`Report::erased`] for more information.
     #[track_caller]
@@ -45,7 +39,7 @@ pub trait ResultReportExt<T, E>: Sized {
 
     /// "Wraps" this [`Report`] with the parent's default [`Report`].
     ///
-    /// See [`Report::wrap`] for more information.
+    /// See [`ReportExt::wrap`] for more information.
     #[track_caller]
     fn wrap<F: IntoReport + Default>(self) -> Result<T, F> {
         self.wrap_with_fn(|| F::default())
@@ -53,7 +47,7 @@ pub trait ResultReportExt<T, E>: Sized {
 
     /// Append a [`Report`] as a parent of this [`Report`].
     ///
-    /// See [`Report::wrap_with`] for more information.
+    /// See [`ReportExt::wrap`] for more information.
     #[track_caller]
     fn wrap_with<F, G: Into<Report<F>>>(self, parent: G) -> Result<T, F> {
         self.wrap_with_fn(|| parent)
@@ -61,7 +55,7 @@ pub trait ResultReportExt<T, E>: Sized {
 
     /// Append a [`Report`] as a parent of this [`Report`].
     ///
-    /// See [`Report::wrap_with`] for more information.
+    /// See [`ReportExt::wrap`] for more information.
     #[track_caller]
     fn wrap_with_fn<F, G: Into<Report<F>>>(self, func: impl FnOnce() -> G) -> Result<T, F>;
 
@@ -105,14 +99,6 @@ pub trait ResultReportExt<T, E>: Sized {
 // NOTE: we can't use `Result::map_err` in any of these since `#[track_caller]` on closures is unstable
 // NOTE: ensure you use `Into::into` on reports before passing the report to any other function without `#[track_caller]` to avoid losing information
 impl<T, E, D: Into<Report<E>>> ResultReportExt<T, E> for StdResult<T, D> {
-    #[inline]
-    fn into_error(self) -> StdResult<T, impl Error + Send + Sync + 'static> {
-        match self {
-            Ok(t) => Ok(t),
-            Err(report) => Err(error::ReportError::new(report.into())),
-        }
-    }
-
     #[inline]
     fn erased(self) -> ErasedResult<T> {
         match self {

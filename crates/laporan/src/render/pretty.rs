@@ -1,4 +1,4 @@
-//! Pretty rendering for [`Report`]s.
+//! Pretty rendering for [`crate::Report`]s.
 
 use core::fmt;
 
@@ -177,9 +177,9 @@ impl Default for Config {
     }
 }
 
-/// Pretty renderer for [`Report`]s.
+/// Pretty renderer for [`crate::Report`]s.
 ///
-/// [`Report`]s can be rendered via the [`Renderer`] trait.
+/// [`crate::Report`]s can be rendered via the [`Renderer`] trait.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct PrettyRenderer {
     config: Config,
@@ -197,9 +197,11 @@ impl PrettyRenderer {
 
     /// Constructs a new `PrettyRenderer` with default settings derived from the environment.
     ///
-    /// Color is enabled if `FORCE_COLOR` is set or stderr is a tty, and is disabled if `NO_COLOR` is set.
+    /// Color is *enabled* if `FORCE_COLOR` is set or stderr is a tty
+    /// Color is *disabled* if `NO_COLOR` is set.
     /// Additionally, `FORCE_COLOR` has higher priority than `NO_COLOR`.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     #[inline]
     #[must_use]
     pub fn from_env() -> Self {

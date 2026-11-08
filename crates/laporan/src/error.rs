@@ -1,3 +1,5 @@
+//! [`Error`] adapter for [`Report`]s.
+
 use core::{error::Error, fmt};
 
 use crate::{

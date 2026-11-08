@@ -1,11 +1,13 @@
+//! Additional generic metadata for [`crate::Report`]s.
+
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use core::{any::Any, fmt};
+use educe::Educe;
 
 /// A single arbitrary key-value pair.
 ///
-/// This can be used to attach additional consumer exposed data to a [`Report`] such as:
-/// ids, timestamps, commands, etc.
+/// This can be used to attach additional consumer exposed data to a [`crate::Report`].
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Context {
@@ -39,6 +41,7 @@ impl Frame for Context {}
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Attachment {
+    /// The contents of this attachment.
     pub content: String,
 }
 
@@ -60,6 +63,7 @@ impl Frame for Attachment {}
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Suggestion {
+    /// The contents of this suggestion.
     pub content: String,
 }
 
@@ -75,9 +79,11 @@ impl Suggestion {
 
 impl Frame for Suggestion {}
 
+/// An additional piece of information attached to a [`crate::Report`].
 #[cfg(not(feature = "serde"))]
 pub trait Frame: Clone + fmt::Debug + Send + Sync + 'static {}
 
+/// An additional piece of information attached to a [`crate::Report`].
 #[cfg(feature = "serde")]
 pub trait Frame: serde::Serialize + Clone + fmt::Debug + Send + Sync + 'static {}
 

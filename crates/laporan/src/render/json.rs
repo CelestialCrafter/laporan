@@ -1,4 +1,4 @@
-//! [JSON](https://json.org/) rendering for [`Report`]s.
+//! [JSON](https://json.org/) rendering for [`crate::Report`]s.
 
 use core::fmt;
 
@@ -24,9 +24,9 @@ impl fmt::Display for JsonDisplayer<'_> {
     }
 }
 
-/// [JSON](https://json.org/) renderer for [`Report`]s.
+/// [JSON](https://json.org/) renderer for [`crate::Report`]s.
 ///
-/// [`Report`]s can be rendered via the [`Report`] trait.
+/// [`crate::Report`]s can be rendered via the [`Renderer`] trait.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct JsonRenderer {
     pretty: bool,

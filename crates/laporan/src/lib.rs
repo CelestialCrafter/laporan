@@ -1,6 +1,7 @@
 //! Error handling crate, split off from Xuehua
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(missing_docs)]
 
 extern crate alloc;
@@ -9,6 +10,7 @@ pub mod error;
 pub mod ext;
 pub mod frame;
 #[cfg(feature = "tracing")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tracing")))]
 pub mod layer;
 pub mod prelude;
 pub mod render;
@@ -45,14 +47,17 @@ use crate::{
 
 pub use ext::{ReportExt, ResultReportExt};
 #[cfg(feature = "derive")]
+#[cfg_attr(docsrs, doc(cfg(feature = "derive")))]
 pub use laporan_derive::IntoReport;
 
 /// Helper alias for [`Error`]
 pub type BoxDynError = Box<dyn Error + Send + Sync + 'static>;
 
-/// Helper alias for [`Result`](StdResult)
+/// Helper alias for [`core::result::Result`]
 pub type Result<T, E> = StdResult<T, Report<E>>;
+/// A [`Report`] with its error type erased.
 pub type ErasedReport = Report<()>;
+/// A [`Result`] with its error type erased.
 pub type ErasedResult<T> = Result<T, ()>;
 
 /// Location data associated with a [`Report`].
@@ -78,12 +83,16 @@ pub enum Location {
 /// Severity level associated with a [`Report`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[allow(missing_docs)]
 pub enum Level {
+    /// Very low priority and verbose information.
     Trace,
+    /// Lower priority debug information.
     Debug,
+    /// Useful information.
     Info,
+    /// Potentially dangerous situations.
     Warn,
+    /// Very serious errors.
     #[default]
     Error,
 }
@@ -145,18 +154,22 @@ impl RawReport {
         }
     }
 
+    /// Returns the associated child reports.
     pub fn children(&self) -> &[Self] {
         &self.children
     }
 
+    /// Returns the associated report message.
     pub fn message(&self) -> &str {
         &self.message
     }
 
+    /// Returns the associated report metadata.
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
     }
 
+    /// Returns an iterator over frames of type `T`.
     pub fn frames_of<T: 'static>(&self) -> impl DoubleEndedIterator<Item = &T> {
         self.frames
             .iter()
@@ -231,7 +244,8 @@ impl<E> Report<E> {
     }
 
     /// Converts this `Report` into an [`ErasedReport`].
-    // NOTE: This should not change self.inner.metadata.type_name like `Self::cast` does.
+    ///
+    /// Note: This does not change the stored [`Metadata::type_name`], unlike [`Report::cast`].
     #[inline]
     #[must_use]
     pub fn erased(self) -> ErasedReport {
@@ -300,9 +314,8 @@ impl<E> Report<E> {
 
     /// "Casts" the reports generic parameter to `F`.
     ///
-    /// It's usually not recommended to use this function,
-    /// and instead use [`Report::erase`] in place of casting,
-    /// but casting can be useful in certain circumstances.
+    /// It's usually not recommended to use this function, and instead use [`Report::erased`].
+    /// This is because `cast` changes the underlying [`Metadata::type_name`] associated with the `Report`.
     #[inline]
     #[must_use]
     pub fn cast<F>(mut self) -> Report<F> {
@@ -334,7 +347,15 @@ impl<E> From<Report<E>> for RawReport {
     }
 }
 
-/// The [`fmt::Debug`] impl for this type defaults to rendering using the [`GlobalRenderer`].
+#[cfg_attr(
+    feature = "std",
+    doc = "If the `std` feature is *enabled*, [`GlobalRenderer`] is used for the [`fmt::Debug`] Implementation."
+)]
+#[cfg_attr(
+    not(feature = "std"),
+    doc = "If the `std` feature is *enabled*, the global renderer is used for the [`fmt::Debug`] Implementation."
+)]
+/// Otherwise, a [`SimpleRenderer`] is used.
 /// Additionally, the `{:#?}` directive can show the `Report` in a typical [`fmt::Debug`] fashion.
 impl<E> fmt::Debug for Report<E> {
     #[inline]
@@ -364,7 +385,14 @@ impl<E> fmt::Display for Report<E> {
 /// Trait for converting [`Error`]s into enriched [`Report`]s
 ///
 /// This can be implemented via `#[derive(IntoReport)]`.
-/// See [`laporan_derive::IntoReport`] for more information.
+#[cfg_attr(
+    feature = "derive",
+    doc = "See [`laporan_derive`] for more information."
+)]
+#[cfg_attr(
+    not(feature = "derive"),
+    doc = "See the `laporan_derive` crate for more information."
+)]
 pub trait IntoReport: Sized + Send + Sync + 'static {
     /// Converts this Error into a [`Report`].
     ///
