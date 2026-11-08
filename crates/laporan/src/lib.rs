@@ -14,6 +14,11 @@ pub mod prelude;
 pub mod render;
 pub mod util;
 
+#[doc(hidden)]
+pub mod __private {
+    pub extern crate alloc;
+}
+
 use core::{
     any::type_name,
     error::Error,
@@ -184,11 +189,10 @@ impl<E: Error> Report<E> {
     /// Constructs a new `Report` from an error.
     ///
     /// Note that this walks [`Error::source`] to build a tree of children.
-    /// To avoid this behavior, consider using [`ErasedReport::new`]
+    /// To avoid this behavior, consider using [`ErasedReport::new`].
     #[track_caller]
     #[inline]
     pub fn from_error(error: E) -> Self {
-        #[track_caller]
         fn walk(error: &dyn Error) -> ErasedReport {
             let report = Report::new(error.to_string());
             match error.source() {
