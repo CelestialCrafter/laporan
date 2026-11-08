@@ -1,3 +1,13 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+
+[workspace.package]
+readme = "README.md"
+keywords = ["error", "error-handling"]
+categories = ["rust-patterns", "no-std"]
+version = "0.2.0"
+edition = "2024"
+license = "MPL-2.0"
+homepage = "https://github.com/CelestialCrafter/laporan"
+repository = "https://github.com/CelestialCrafter/laporan"
