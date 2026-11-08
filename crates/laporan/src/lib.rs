@@ -230,11 +230,19 @@ impl<E> Report<E> {
         }
     }
 
-    /// Sets the level associated with the `Report`.
+    /// Sets the level associated with this `Report`.
     #[inline]
     #[must_use]
     pub fn with_level(mut self, level: Level) -> Self {
         self.inner.metadata.level = level;
+        self
+    }
+
+    /// Sets the location associated with this `Report`.
+    #[inline]
+    #[must_use]
+    pub fn with_location(mut self, location: Location) -> Self {
+        self.inner.metadata.location = location;
         self
     }
 
@@ -296,9 +304,12 @@ impl<E> fmt::Debug for Report<E> {
         if f.alternate() {
             self.inner.fmt(f)
         } else {
-            if cfg!(feature = "std") {
+            #[cfg(feature = "std")]
+            {
                 GlobalRenderer.render(self).fmt(f)
-            } else {
+            }
+            #[cfg(not(feature = "std"))]
+            {
                 SimpleRenderer.render(self).fmt(f)
             }
         }

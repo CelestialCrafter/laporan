@@ -307,6 +307,7 @@ impl PrettyDisplayer<'_> {
         &self,
         printer: &mut LinePrinter<'_, '_>,
         prefix: fmt::Arguments<'_>,
+        continuation_prefix: fmt::Arguments<'_>,
         first_prefix: fmt::Arguments<'_>,
         content: &str,
         style: Style,
@@ -321,7 +322,7 @@ impl PrettyDisplayer<'_> {
 
         lines.into_iter().try_for_each(|line| {
             let line = self.render_value(line, style);
-            write!(printer, "{prefix}  {line}")
+            write!(printer, "{continuation_prefix}  {line}")
         })
     }
 
@@ -348,6 +349,7 @@ impl PrettyDisplayer<'_> {
         self.write_block(
             printer,
             prefix,
+            next_prefix,
             format_args!("{} ", log_header),
             message,
             Style::new().bold(),
@@ -415,6 +417,7 @@ impl PrettyDisplayer<'_> {
         for Suggestion { content } in raw.frames_of::<Suggestion>() {
             self.write_block(
                 printer,
+                prefix,
                 prefix,
                 format_args!(
                     "{} ",
