@@ -20,11 +20,11 @@ impl Context {
     #[inline]
     pub fn new<K, V>(key: K, value: V) -> Self
     where
-        K: Into<String>,
+        K: fmt::Display,
         V: fmt::Display,
     {
         Self {
-            key: key.into(),
+            key: key.to_string(),
             value: value.to_string(),
         }
     }

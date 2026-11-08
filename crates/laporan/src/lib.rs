@@ -82,8 +82,8 @@ pub enum Location {
 pub enum Level {
     Trace,
     Debug,
-    Warn,
     Info,
+    Warn,
     #[default]
     Error,
 }
@@ -91,7 +91,7 @@ pub enum Level {
 /// Metadata associated with a [`Report`].
 #[derive(Clone, Debug, Educe)]
 #[educe(Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Metadata {
     /// The location in which the [`Report`] originated.
     pub location: Location,
@@ -136,9 +136,9 @@ impl RawReport {
     #[track_caller]
     #[inline]
     #[must_use]
-    pub fn new(message: impl Into<String>) -> Self {
+    pub fn new(message: impl fmt::Display) -> Self {
         Self {
-            message: message.into(),
+            message: message.to_string(),
             metadata: Metadata::new(),
             children: Vec::default(),
             frames: Vec::default(),
@@ -180,8 +180,8 @@ impl ErasedReport {
     /// Constructs a new [`ErasedReport`] from a message.
     #[track_caller]
     #[inline]
-    pub fn new(message: impl Into<String>) -> Self {
-        Self::from_raw(RawReport::new(message.into()))
+    pub fn new(message: impl fmt::Display) -> Self {
+        Self::from_raw(RawReport::new(message.to_string()))
     }
 }
 
@@ -194,14 +194,21 @@ impl<E: Error> Report<E> {
     #[inline]
     pub fn from_error(error: E) -> Self {
         fn walk(error: &dyn Error) -> ErasedReport {
-            let report = Report::new(error.to_string());
+            let mut report = Report::new(error.to_string());
+            report.inner.metadata.location = Location::Unknown;
+
             match error.source() {
                 Some(source) => report.with_child(walk(source)),
                 None => report,
             }
         }
 
-        walk(&error).cast()
+        let mut report = Report::new(error.to_string()).cast();
+        if let Some(source) = error.source() {
+            report = report.with_child(walk(source));
+        }
+
+        report
     }
 }
 
@@ -232,6 +239,14 @@ impl<E> Report<E> {
             inner: self.inner,
             _marker: PhantomData,
         }
+    }
+
+    /// Replaces the message associated with this `Report`.
+    #[inline]
+    #[must_use]
+    pub fn with_message(mut self, message: impl fmt::Display) -> Self {
+        self.inner.message = message.to_string();
+        self
     }
 
     /// Sets the level associated with this `Report`.
@@ -297,6 +312,25 @@ impl<E> Report<E> {
             inner: self.inner,
             _marker: PhantomData,
         }
+    }
+}
+
+impl<E> AsRef<RawReport> for Report<E> {
+    #[inline]
+    fn as_ref(&self) -> &RawReport {
+        self.inner.as_ref()
+    }
+}
+
+impl<E> From<RawReport> for Report<E> {
+    fn from(value: RawReport) -> Self {
+        Self::from_raw(value)
+    }
+}
+
+impl<E> From<Report<E>> for RawReport {
+    fn from(value: Report<E>) -> Self {
+        value.into_raw()
     }
 }
 

@@ -29,8 +29,7 @@ impl fmt::Display for JsonDisplayer<'_> {
 /// [`Report`]s can be rendered via the [`Report`] trait.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct JsonRenderer {
-    /// Whether or not the output is pretty-printed.
-    pub pretty: bool,
+    pretty: bool,
 }
 
 impl JsonRenderer {
@@ -39,6 +38,13 @@ impl JsonRenderer {
     #[must_use]
     pub const fn new() -> Self {
         Self { pretty: false }
+    }
+
+    /// Whether or not the output is pretty-printed.
+    #[inline]
+    #[must_use]
+    pub const fn with_pretty(self, pretty: bool) -> Self {
+        Self { pretty }
     }
 }
 

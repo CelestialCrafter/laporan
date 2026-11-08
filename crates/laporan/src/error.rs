@@ -8,16 +8,23 @@ use crate::{
 /// Type representing a [`Report`], but implementing [`Error`].
 ///
 /// This error type does not carry over all the frills of a [`Report`] (such as error trees).
-/// It is also impossible to losslessly convert this back to a [`Report`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(transparent)]
 pub struct ReportError(RawReport);
 
 impl ReportError {
+    /// Constructs a new `ReportError` from a [`Report`].
     #[inline]
     #[track_caller]
     pub fn new<E>(report: impl Into<Report<E>>) -> Self {
         Self(*report.into().inner)
+    }
+
+    /// Converts this error back into a [`Report`].
+    #[inline]
+    #[must_use]
+    pub fn into_inner<E>(self) -> Report<E> {
+        Report::from_raw(self.0)
     }
 }
 
@@ -56,13 +63,15 @@ impl fmt::Display for ReportError {
     }
 }
 
-impl From<RawReport> for ReportError {
-    fn from(value: RawReport) -> Self {
-        Self(value)
+impl<E> From<ReportError> for Report<E> {
+    #[inline]
+    fn from(value: ReportError) -> Self {
+        value.into_inner()
     }
 }
 
 impl<E> From<Report<E>> for ReportError {
+    #[inline]
     fn from(value: Report<E>) -> Self {
         Self::new(value)
     }
