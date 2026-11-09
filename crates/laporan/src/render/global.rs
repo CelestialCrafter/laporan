@@ -1,8 +1,10 @@
 //! Rendering proxy to a global report [`Renderer`].
 
-use std::{
+use alloc::boxed::Box;
+use core::{
     fmt::{self, Display},
-    sync::OnceLock,
+    ptr::{self, NonNull},
+    sync::atomic::{AtomicPtr, Ordering},
 };
 
 use crate::{
@@ -10,13 +12,13 @@ use crate::{
     render::{Renderer, SimpleRenderer},
 };
 
-static RENDERER: OnceLock<Box<dyn DynRender + Send + Sync>> = OnceLock::new();
+static RENDERER: AtomicPtr<&'static dyn DynRender> = AtomicPtr::new(ptr::null_mut());
 
-trait DynRender {
+trait DynRender: Send + Sync {
     fn render(&self, raw: &RawReport, fmt: &mut fmt::Formatter) -> fmt::Result;
 }
 
-impl<T: Renderer> DynRender for T {
+impl<T: Renderer + Send + Sync> DynRender for T {
     #[inline]
     fn render(&self, raw: &RawReport, f: &mut fmt::Formatter) -> fmt::Result {
         Renderer::render(self, raw).fmt(f)
@@ -30,12 +32,14 @@ struct GlobalDisplayer<'a> {
 impl fmt::Display for GlobalDisplayer<'_> {
     #[inline]
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let renderer = match RENDERER.get() {
-            Some(global) => global.as_ref(),
-            None => &SimpleRenderer,
-        };
+        let renderer = NonNull::new(RENDERER.load(Ordering::Acquire)).map(|ptr|
+                // SAFETY: All pointers stored into `RENDERER` must originate from valid references that live for 'static.
+                unsafe { ptr.as_ref() });
 
-        renderer.render(self.raw, formatter)
+        match renderer {
+            Some(renderer) => renderer.render(self.raw, formatter),
+            None => Renderer::render(&SimpleRenderer, self.raw).fmt(formatter),
+        }
     }
 }
 
@@ -46,13 +50,13 @@ pub struct GlobalRenderer;
 
 impl GlobalRenderer {
     /// Sets the global [`Renderer`].
-    /// The global renderer can only be set once and applies to the entire program,
-    /// so libraries should avoid calling this function.
     ///
-    /// Returns `None` if a renderer was already set.
+    /// The global renderer applies to the entire program, so libraries should avoid calling this function.
+    /// Renderers used must be `'static` references to a renderer, meaning that you probably should use [`Box::leak`] or something similar.
     #[inline]
-    pub fn set(renderer: impl Renderer + Send + Sync + 'static) -> Option<()> {
-        RENDERER.set(Box::new(renderer)).ok()
+    pub fn set<R: Renderer + Send + Sync>(renderer: &'static R) {
+        let ptr = Box::into_raw(Box::new(renderer as _));
+        RENDERER.swap(ptr, Ordering::AcqRel);
     }
 }
 

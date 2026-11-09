@@ -38,11 +38,9 @@ use alloc::{
 
 use educe::Educe;
 
-#[cfg(feature = "std")]
-use crate::render::GlobalRenderer;
 use crate::{
     frame::{DynFrame, Frame},
-    render::{Renderer, SimpleRenderer},
+    render::{GlobalRenderer, Renderer, SimpleRenderer},
 };
 
 pub use ext::{ReportExt, ResultReportExt};
@@ -347,15 +345,7 @@ impl<E> From<Report<E>> for RawReport {
     }
 }
 
-#[cfg_attr(
-    feature = "std",
-    doc = "If the `std` feature is *enabled*, [`GlobalRenderer`] is used for the [`fmt::Debug`] Implementation."
-)]
-#[cfg_attr(
-    not(feature = "std"),
-    doc = "If the `std` feature is *enabled*, the global renderer is used for the [`fmt::Debug`] Implementation."
-)]
-/// Otherwise, a [`SimpleRenderer`] is used.
+/// The [`fmt::Debug`] impl for this type renders with the [`GlobalRenderer`].
 /// Additionally, the `{:#?}` directive can show the `Report` in a typical [`fmt::Debug`] fashion.
 impl<E> fmt::Debug for Report<E> {
     #[inline]
@@ -363,14 +353,7 @@ impl<E> fmt::Debug for Report<E> {
         if f.alternate() {
             self.inner.fmt(f)
         } else {
-            #[cfg(feature = "std")]
-            {
-                GlobalRenderer.render(self).fmt(f)
-            }
-            #[cfg(not(feature = "std"))]
-            {
-                SimpleRenderer.render(self).fmt(f)
-            }
+            GlobalRenderer.render(self).fmt(f)
         }
     }
 }

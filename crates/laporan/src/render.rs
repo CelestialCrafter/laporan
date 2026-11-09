@@ -1,7 +1,5 @@
 //! Rendering for [`crate::Report`]s in various formats.
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub mod global;
 #[cfg(feature = "json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
@@ -13,8 +11,6 @@ pub mod simple;
 
 use core::fmt;
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub use global::GlobalRenderer;
 #[cfg(feature = "json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
